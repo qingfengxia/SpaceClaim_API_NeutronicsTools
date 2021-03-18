@@ -35,23 +35,28 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Scripting">
-      <HintPath>C:\Program Files\ANSYS Inc\v182\scdm\Microsoft.Scripting.dll</HintPath>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\Microsoft.Scripting.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="SpaceClaim.Api.V16, Version=16.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\..\..\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V16\SpaceClaim.Api.V16.dll</HintPath>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V16\SpaceClaim.Api.V16.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="SpaceClaim.Api.V16.Scripting, Version=16.0.0.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=AMD64">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\..\..\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V16.Scripting.dll</HintPath>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V16.Scripting.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="SpaceClaim.Api.V18, Version=18.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\..\..\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V18\SpaceClaim.Api.V18.dll</HintPath>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V18\SpaceClaim.Api.V18.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="SpaceClaim.Api.V18.Scripting">
-      <HintPath>..\..\..\..\..\..\..\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V18.Scripting.dll</HintPath>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V18.Scripting.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -213,6 +218,7 @@
     <Content Include="CCFE_Toolbox_Manifest.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="../README.md" />
     <None Include="Resources\Image1.png" />
     <None Include="Resources\mtw_image1.png" />
     <None Include="Resources\cpec_image.png" />
@@ -267,7 +273,7 @@
     <Folder Include="Test\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
   </Target>

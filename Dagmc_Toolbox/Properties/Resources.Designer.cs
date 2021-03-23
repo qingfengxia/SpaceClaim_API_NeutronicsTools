@@ -80,20 +80,20 @@ namespace Dagmc_Toolbox.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Export Tool.
+        ///   Looks up a localized string similar to Export geometry and surface mesh in MOAB file format.
         /// </summary>
-        internal static string ExportText {
+        internal static string DagmcExportHint {
             get {
-                return ResourceManager.GetString("ExportText", resourceCulture);
+                return ResourceManager.GetString("DagmcExportHint", resourceCulture);
             }
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to .sat geomerty export by material..
+        ///   Looks up a localized string similar to Dagmc Export.
         /// </summary>
-        internal static string ExportTextHint {
+        internal static string DagmcExportText {
             get {
-                return ResourceManager.GetString("ExportTextHint", resourceCulture);
+                return ResourceManager.GetString("DagmcExportText", resourceCulture);
             }
         }
         
@@ -103,6 +103,34 @@ namespace Dagmc_Toolbox.Properties {
         internal static string PartGroupText {
             get {
                 return ResourceManager.GetString("PartGroupText", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap PrintUid {
+            get {
+                object obj = ResourceManager.GetObject("PrintUid", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Print solid geometry hash.
+        /// </summary>
+        internal static string PrintUidHint {
+            get {
+                return ResourceManager.GetString("PrintUidHint", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hash ID.
+        /// </summary>
+        internal static string PrintUidText {
+            get {
+                return ResourceManager.GetString("PrintUidText", resourceCulture);
             }
         }
         

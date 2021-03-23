@@ -37,8 +37,14 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Half, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Half.1.0.0-beta\lib\netstandard2.0\Half.dll</HintPath>
+    <ProjectReference Include="D:\MyData\StepMultiphysics\DAGMC_Plugin\MOABSharp\MOABSharp\MOABSharp.csproj">
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </ProjectReference>
+    <Reference Include="CppSharp.Runtime">
+      <HintPath>..\..\MOABSharp\MOABSharp\bin\Debug\netstandard2.0\CppSharp.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="MOABSharp">
+      <HintPath>..\..\MOABSharp\MOABSharp\bin\Debug\netstandard2.0\MOABSharp.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="SpaceClaim.Api.V18, Version=18.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
@@ -53,6 +59,9 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Half, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Half.1.0.0\lib\netstandard2.0\System.Half.dll</HintPath>
+    </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -61,6 +70,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Commands\PrintUid.cs" />
     <Compile Include="Dagmc_Toolbox.Helper.cs" />
     <!-- generated cs files, must be compiled before use the in Addin.cs -->
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -81,13 +91,14 @@
     <Content Include="Dagmc_Toolbox_Manifest.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="Resources\PrintUid.png" />
+    <None Include="DevNote_Trelis DAGMC plugin porting  to SpaceClaim.md" />
     <None Include="packages.config" />
     <None Include="README.md" />
-    <!--
-    <None Include="PythonScripts\PrintUID.scscript">
+    <!--     -->
+    <None Include="PythonScripts\PrintUid.scscript">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    -->
     <None Include="app.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -95,6 +106,7 @@
     </None>
     <None Include="Resources\ExportDagmc.png" />
     <None Include="Resources\Ribbon.xml" />
+    <None Include="TemplateReadme.md" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Test\" />

@@ -19,7 +19,8 @@ namespace Dagmc_Toolbox
         {
             new SpaceClaim.Api.V18.Extensibility.CommandCapsule("Dagmc_Toolbox.C#.V18.RibbonTab", Properties.Resources.RibbonTabText),
             new SpaceClaim.Api.V18.Extensibility.CommandCapsule("Dagmc_Toolbox.C#.V18.PartGroup", Properties.Resources.PartGroupText),
-            new Commands.ExportDagmc()
+            new Commands.ExportDagmc(),
+            new Commands.PrintUid()
         };
 
         #region IExtensibility members

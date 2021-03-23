@@ -26,7 +26,8 @@
 						the image can only be specified if you use the 'command' attribute.  The Image property
 						of the Command object is used.
 					-->
-                        <button id="Dagmc_Toolbox.C#.V18.DagmcExport" size="large" command="Dagmc_Toolbox.C#.V18.DagmcExport"/>
+                        <button id="Dagmc_Toolbox.C#.V18.ExportDagmc" size="large" command="Dagmc_Toolbox.C#.V18.ExportDagmc"/>
+					    <button id="CCFE_Toolbox.C#.V18.PrintUid" size="large" command="CCFE_Toolbox.C#.V18.PrintUid"/>
                     </group>
 
         <!--

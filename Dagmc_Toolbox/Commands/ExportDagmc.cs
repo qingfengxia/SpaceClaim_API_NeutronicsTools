@@ -13,7 +13,7 @@ using System.Windows.Forms;
 using SpaceClaim.Api.V18;
 using Point = SpaceClaim.Api.V18.Geometry.Point;
 using System.Diagnostics;
-//using MOAB;
+
 
 using Dagmc_Toolbox.Properties;
 
@@ -26,9 +26,8 @@ namespace Dagmc_Toolbox.Commands
 
         public const string CommandName = "Dagmc_Toolbox.C#.V18.ExportDagmc";
 
-        public ExportDagmc() : base(CommandName, Resources.ExportText, Resources.DagmcExport, Resources.ExportTextHint)
+        public ExportDagmc() : base(CommandName, Resources.DagmcExportText, Resources.DagmcExport, Resources.DagmcExportHint)
         {
-
         }
         
         protected override void OnUpdate(Command command)
@@ -44,6 +43,8 @@ namespace Dagmc_Toolbox.Commands
 
             // User selects the file destination to save
             //----------------------------------------------------------
+
+            MessageBox.Show("ExportDagmc called");
 
             var data = ExportDagmcData.FromString(context.Data);
             if (data == null)

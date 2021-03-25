@@ -26,7 +26,7 @@ namespace Dagmc_Toolbox.Commands
 
         public const string CommandName = "Dagmc_Toolbox.C#.V18.ExportDagmc";
 
-        public ExportDagmc() : base(CommandName, Resources.DagmcExportText, Resources.DagmcExport, Resources.DagmcExportHint)
+        public ExportDagmc() : base(CommandName, Resources.ExportDagmcText, Resources.ExportDagmc, Resources.ExportDagmcHint)
         {
         }
         

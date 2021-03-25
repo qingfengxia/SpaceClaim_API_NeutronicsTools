@@ -72,9 +72,9 @@ namespace Dagmc_Toolbox.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
-        internal static System.Drawing.Bitmap DagmcExport {
+        internal static System.Drawing.Bitmap ExportDagmc {
             get {
-                object obj = ResourceManager.GetObject("DagmcExport", resourceCulture);
+                object obj = ResourceManager.GetObject("ExportDagmc", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
@@ -82,18 +82,18 @@ namespace Dagmc_Toolbox.Properties {
         /// <summary>
         ///   Looks up a localized string similar to Export geometry and surface mesh in MOAB file format.
         /// </summary>
-        internal static string DagmcExportHint {
+        internal static string ExportDagmcHint {
             get {
-                return ResourceManager.GetString("DagmcExportHint", resourceCulture);
+                return ResourceManager.GetString("ExportDagmcHint", resourceCulture);
             }
         }
         
         /// <summary>
         ///   Looks up a localized string similar to Dagmc Export.
         /// </summary>
-        internal static string DagmcExportText {
+        internal static string ExportDagmcText {
             get {
-                return ResourceManager.GetString("DagmcExportText", resourceCulture);
+                return ResourceManager.GetString("ExportDagmcText", resourceCulture);
             }
         }
         

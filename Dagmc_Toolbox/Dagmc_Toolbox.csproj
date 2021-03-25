@@ -70,6 +70,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Commands\DagmcExportor.cs" />
     <Compile Include="Commands\PrintUid.cs" />
     <Compile Include="Dagmc_Toolbox.Helper.cs" />
     <!-- generated cs files, must be compiled before use the in Addin.cs -->

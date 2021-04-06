@@ -13,6 +13,8 @@ using SpaceClaim.Api.V18.Extensibility;
 using SpaceClaim.Api.V18.Geometry;
 using SpaceClaim.Api.V18.Modeler;
 using SpaceClaim.Api.V18;
+using SpaceClaim.Api.V18.Scripting;
+using SpaceClaim.Api.V18.Scripting.Commands;
 using Point = SpaceClaim.Api.V18.Geometry.Point;
 
 using Moab = MOAB.Moab;
@@ -26,11 +28,13 @@ using EntityHandle = System.UInt64;   // type alias is only valid in the source 
 ///using RefEntity = SpaceClaim.Api.V18.Geometry.IShape;
 using RefGroup = SpaceClaim.Api.V18.Group;   /// SpaceClaim.Api.V18.Group;
 using RefEntity = SpaceClaim.Api.V18.Modeler.Topology;
-using RefBody = SpaceClaim.Api.V18.Modeler.Body;
+// RefVolume ?
+using RefBody = SpaceClaim.Api.V18.DesignBody;
 using RefFace = SpaceClaim.Api.V18.Modeler.Face;
 using RefEdge = SpaceClaim.Api.V18.Modeler.Edge;
 using RefVertex = SpaceClaim.Api.V18.Modeler.Vertex;
 using Primitive = System.Double;
+using SpaceClaim.Api.V18.Scripting.Commands.CommandOptions;
 
 /// RefEntity:  ref to CubitEntity 
 //typedef std::map<RefEntity*, moab::EntityHandle> refentity_handle_map;
@@ -79,6 +83,7 @@ namespace Dagmc_Toolbox
         readonly int GROUP_INDEX = 4;
         object[] TopologyEntities;
 
+        static readonly EntityHandle UNINITIALIZED_HANDLE = 0;
         internal class EntitityTopology
         {
             public List<RefVertex> Vertices;
@@ -219,7 +224,7 @@ namespace Dagmc_Toolbox
             rval = create_curve_facets(ref entityMaps[CURVE_INDEX], ref entityMaps[VERTEX_INDEX]);
             CHK_MB_ERR_RET("Error faceting curves: ", rval);
 
-            rval = create_surface_facets(ref entityMaps[SURFACE_INDEX], ref entityMaps[VERTEX_INDEX]);
+            rval = create_surface_facets(ref entityMaps[SURFACE_INDEX], ref entityMaps[CURVE_INDEX], ref entityMaps[VERTEX_INDEX]);
             CHK_MB_ERR_RET("Error faceting surfaces: ", rval);
 
             rval = gather_ents(file_set);
@@ -231,7 +236,7 @@ namespace Dagmc_Toolbox
                 CHK_MB_ERR_RET("Could not make the model watertight.", rval);
             }
 
-            EntityHandle h = 0;  /// to mimic nullptr  for  "EntityHandle*" in C++
+            EntityHandle h = UNINITIALIZED_HANDLE;  /// to mimic nullptr  for  "EntityHandle*" in C++
             rval = myMoabInstance.WriteFile((string)options["filename"], null, null, ref h, 0, null, 0);
             CHK_MB_ERR_RET("Error writing file: ", rval);
 
@@ -365,7 +370,7 @@ namespace Dagmc_Toolbox
         object[] generate_topoloyg_map()
         {
             Part part = Helper.GetActiveMainPart();  // todo: can a document have multiple Parts?
-            List<RefBody> bodies = Helper.GatherAllEntities<DesignBody>(part).ConvertAll<RefBody>(o => o.Shape);
+            List<RefBody> bodies = Helper.GatherAllEntities<DesignBody>(part);  // .ConvertAll<RefBody>(o => o.Shape)
             List<RefFace> surfaces = Helper.GatherAllEntities<DesignFace>(part).ConvertAll<RefFace>(o => o.Shape);
             List<RefEdge> curves = Helper.GatherAllEntities<DesignEdge>(part).ConvertAll<RefEdge>(o => o.Shape);
             List<RefVertex> vertices = new List<RefVertex>();  //TODO
@@ -635,7 +640,7 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        // (&entitymap)[5]
+
         Moab.ErrorCode store_groups(RefEntityHandleMap[] entitymap, GroupHandleMap group_map )
         {
             Moab.ErrorCode rval;
@@ -652,7 +657,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        ///  group in SpaceClaim has not been 
+        ///  todo: group retrieval in SpaceClaim API has not been found
         /// </summary>
         /// <param name="group_map"></param>
         /// <returns></returns>
@@ -665,7 +670,7 @@ namespace Dagmc_Toolbox
             foreach (RefGroup  group in allGroups)
             {
                 // Create entity handle for the group
-                EntityHandle h = 0;
+                EntityHandle h = UNINITIALIZED_HANDLE;
                 int start_id = 0;
                 rval = myMoabInstance.CreateMeshset((uint)Moab.EntitySetProperty.MESHSET_SET, ref h, start_id);
                 if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
@@ -807,12 +812,15 @@ namespace Dagmc_Toolbox
                     }
                     else if ( null == body)
                     {
-                        var ent = body.Shape;
-                        // from Body get a list of Volumes
                         int dim = 1;  // get dim/type of geometry/topology type
 
-                        //if (! (ent in entitymap[dim]))
-                        //    entities.Insert(entitymap[dim][ent]);
+                        //if (! groupMap.ContainsKey(ent))   // this line can not be translated into SpaceClaim
+                        //    entities.Insert(groupMap[ent]);
+
+                        var ent = body.Shape;
+                        //  get a list of Volumes from Body:  `DLIList<RefVolume*> vols;  body->ref_volumes(vols);`
+                        // In SpaceClaim, Body has PieceCount, but it seems not possible to get each piece
+                        //foreach(var vol in ent.)
                     }
                     else
                     {
@@ -892,328 +900,294 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
+        Moab.ErrorCode add_vertex(in Point pos,  ref EntityHandle h)
+        {
+            Moab.ErrorCode rval;
+            double[] coords = { pos.X, pos.Y, pos.Z };
+            rval = myMoabInstance.CreateVertex(coords, ref h);
+            if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
+            
+            return Moab.ErrorCode.MB_SUCCESS;
+        }
+
         Moab.ErrorCode create_vertices(ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
             foreach (var key in vertex_map.Keys)
             {
+                EntityHandle h = UNINITIALIZED_HANDLE;
                 RefVertex v = (RefVertex)key;
-                Point pos = v.Position; 
-                double[] coords =  { pos.X, pos.Y, pos.Z };
-
-                EntityHandle h = 0;
-                rval = myMoabInstance.CreateVertex(coords, ref h);
-                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-
+                Point pos = v.Position;
+                rval = add_vertex(pos, ref h);
                 // Add the vertex to its tagged meshset
                 rval = myMoabInstance.AddEntities(vertex_map[key], ref h, 1);
                 if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-
                 // point map entry at vertex handle instead of meshset handle to
                 // simplify future operations
                 vertex_map[key] = h;
             }
-
-            /*
-            refentity_handle_map_itor ci;
-
-            for (ci = vertex_map.begin(); ci != vertex_map.end(); ++ci)
-            {
-                CubitVector pos = dynamic_cast<RefVertex*>(ci->first)->coordinates();
-                double coords[3] = { pos.x(), pos.y(), pos.z() };
-
-                EntityHandle vh;
-                rval = myMoabInstance.CreateVertex(coords, vh);
-                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-
-                // Add the vertex to its tagged meshset
-                rval = myMoabInstance.AddEntities(ci->second, &vh, 1);
-                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-
-                // point map entry at vertex handle instead of meshset handle to
-                // simplify future operations
-                ci->second = vh;
-            }
-            */
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-
-        Moab.ErrorCode create_curve_facets(ref RefEntityHandleMap curve_map,
+        /// <summary>
+        ///  should be merged into create_surface_facets for performance.
+        /// </summary>
+        /// <param name="curve_map"></param>
+        /// <param name="vertex_map"></param>
+        /// <returns></returns>
+        Moab.ErrorCode create_curve_facets(ref RefEntityHandleMap edge_map,
                                            ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
-            /*
-                CubitStatus s;
 
-                // Maximum allowable curve-endpoint proximity warnings
-                // If this integer becomes negative, then abs(curve_warnings) is the
-                // number of warnings that were suppressed.
-                int curve_warnings = 0;
-                failed_curve_count = 0;
-
-                // Map iterator
-                refentity_handle_map_itor ci;
-
-                // Create geometry for all curves
-                GMem data;
-                for (ci = curve_map.begin(); ci != curve_map.end(); ++ci)
-                {
-                    // Get the start and end points of the curve in the form of a reference edge
-                    RefEdge* edge = dynamic_cast<RefEdge*>(ci->first);
-                    // Get the edge's curve information
-                    Curve* curve = edge->get_curve_ptr();
-                    // Clean out previous curve information
-                    data.clear();
-                    // Facet curve according to parameters and CGM version
-                    s = edge->get_graphics(data, norm_tol, faceting_tol);
-
-                    if (s != CUBIT_SUCCESS)
-                    {
-                        // if we fatal on curves
-                        if (fatal_on_curves)
-                        {
-                            message.WriteLine("Failed to facet the curve " << edge->id() ; ;
-                            return Moab.ErrorCode.MB_FAILURE;
-                        }
-                        // otherwise record them
-                        else
-                        {
-                            failed_curve_count++;
-                            failed_curves.push_back(edge->id());
-                        }
-                        continue;
-                    }
-
-                    std::vector<CubitVector> points = data.point_list();
-
-                    // Need to reverse data?
-                    if (curve->bridge_sense() == CUBIT_REVERSED)
-                        std::reverse(points.begin(), points.end());
-
-                    // Check for closed curve
-                    RefVertex* start_vtx, *end_vtx;
-                    start_vtx = edge->start_vertex();
-                    end_vtx = edge->end_vertex();
-
-                    // Special case for point curve
-                    if (points.size() < 2)
-                    {
-                        if (start_vtx != end_vtx || curve->measure() > GEOMETRY_RESABS)
-                        {
-                            message.WriteLine("Warning: No facetting for curve " << edge->id() ; ;
-                            continue;
-                        }
-                        moab::EntityHandle h = vertex_map[start_vtx];
-                        rval =myMoabInstance.add_entities(ci->second, &h, 1);
-                        if (Moab.ErrorCode.MB_SUCCESS != rval)
-                            return Moab.ErrorCode.MB_FAILURE;
-                        continue;
-                    }
-                    // Check to see if the first and last interior vertices are considered to be
-                    // coincident by CUBIT
-                    const bool closed = (points.front() - points.back()).length() < GEOMETRY_RESABS;
-                    if (closed != (start_vtx == end_vtx))
-                    {
-                        message.WriteLine("Warning: topology and geometry inconsistant for possibly closed curve "
-                                << edge->id() ; ;
-                    }
-
-                    // Check proximity of vertices to end coordinates
-                    if ((start_vtx->coordinates() - points.front()).length() > GEOMETRY_RESABS ||
-                        (end_vtx->coordinates() - points.back()).length() > GEOMETRY_RESABS)
-                    {
-
-                        curve_warnings--;
-                        if (curve_warnings >= 0 || verbose_warnings)
-                        {
-                            message.WriteLine("Warning: vertices not at ends of curve " << edge->id() ; ;
-                            if (curve_warnings == 0 && !verbose_warnings)
-                            {
-                                message.WriteLine("         further instances of this warning will be suppressed..." ; ;
-                            }
-                        }
-                    }
-
-                    // Create interior points
-                    std::vector<moab::EntityHandle> verts, edges;
-                    verts.push_back(vertex_map[start_vtx]);
-                    for (size_t i = 1; i < points.size() - 1; ++i)
-                    {
-                        double coords[] = { points[i].x(), points[i].y(), points[i].z() };
-                        EntityHandle h;
-                        // Create vertex entity
-                        rval = myMoabInstance.CreateVertex(ref coords[0], ref h);
-                        if (Moab.ErrorCode.MB_SUCCESS != rval)
-                            return Moab.ErrorCode.MB_FAILURE;
-                        verts.push_back(h);
-                    }
-                    verts.push_back(vertex_map[end_vtx]);
-
-                    // Create edges
-                    for (size_t i = 0; i < verts.size() - 1; ++i)
-                    {
-                        EntityHandle h;
-                        rval = myMoabInstance.CreateElement(MBEDGE, &verts[i], 2, ref h);
-                        if (Moab.ErrorCode.MB_SUCCESS != rval)
-                            return Moab.ErrorCode.MB_FAILURE;
-                        edges.push_back(h);
-                    }
-
-                    // If closed, remove duplicate
-                    if (verts.front() == verts.back())
-                        verts.pop_back();
-                    // Add entities to the curve meshset from entitymap
-                    rval = myMoabInstance.AddEntities(ci->second, &verts[0], verts.size());
-                    if (Moab.ErrorCode.MB_SUCCESS != rval)
-                        return Moab.ErrorCode.MB_FAILURE;
-                    rval = myMoabInstance.AddEntities(ci->second, &edges[0], edges.size());
-                    if (Moab.ErrorCode.MB_SUCCESS != rval)
-                        return Moab.ErrorCode.MB_FAILURE;
-                }
-                */
-            if (!verbose_warnings && curve_warnings < 0)
+            List<RefBody> allBodies = (List<RefBody>)TopologyEntities[VOLUME_INDEX];
+            foreach (var body in allBodies)
             {
-                message.WriteLine($"Suppressed {-curve_warnings } 'vertices not at ends of curve' warnings.");
-                //std::cerr << "To see all warnings, use reader param VERBOSE_CGM_WARNINGS." ;;
+                Moab.Range entities = new Moab.Range();
+                //var designBody = body.
+                foreach (var kv in body.GetEdgeTessellation(body.Shape.Edges))
+                {
+                    // do nothing, as this function body has been moved
+                }
             }
 
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        /// this function is full of Cubit Types
-        Moab.ErrorCode create_surface_facets(ref RefEntityHandleMap surface_map,
+        Moab.ErrorCode check_edge_mesh(RefEdge edge, ICollection<Point> points)
+        {
+            var curve = edge.GetGeometry<Curve>();  // the return may be null
+            if (points.Count == 0)
+            {
+                // if we fatal on curves
+                if (fatal_on_curves)
+                {
+                    message.WriteLine("Failed to facet the curve {}", edge.GetHashCode());
+                    return Moab.ErrorCode.MB_FAILURE;
+                }
+                // otherwise record them
+                else
+                {
+                    failed_curve_count++;
+                    failed_curves.Add(edge.GetHashCode());
+                    return Moab.ErrorCode.MB_FAILURE;
+                }
+            }
+            
+            if (points.Count < 2)
+            {
+                var interval = 1e-3;  // todo, not compilable code
+                /*
+                if (curve.GetLength(interval) > GEOMETRY_RESABS)   // `start_vtx != end_vtx`  not necessary
+                {
+                    message.WriteLine("Warning: No facetting for curve {}", edge.GetHashCode());
+                    return Moab.ErrorCode.MB_FAILURE;
+                }
+                */
+            }
+
+            // Check for closed curve
+            RefVertex start_vtx, end_vtx;
+            start_vtx = edge.StartVertex;
+            end_vtx = edge.EndVertex;
+            // Check to see if the first and last interior vertices are considered to be
+            // coincident by CUBIT
+            bool closed = (points.Last() - points.First()).Magnitude < GEOMETRY_RESABS;
+            if (closed != (start_vtx == end_vtx))
+            {
+                message.WriteLine("Warning: topology and geometry inconsistant for possibly closed curve {}", edge.GetHashCode());
+            }
+
+            // Check proximity of vertices to end coordinates
+            if ((start_vtx.Position - points.First()).Magnitude > GEOMETRY_RESABS ||
+                (end_vtx.Position - points.Last()).Magnitude > GEOMETRY_RESABS)  // todo: is Magnitude == 
+            {
+
+                curve_warnings--;
+                if (curve_warnings >= 0 || verbose_warnings)
+                {
+                    message.WriteLine("Warning: vertices not at ends of curve {}", edge.GetHashCode());
+                    if (curve_warnings == 0 && !verbose_warnings)
+                    {
+                        message.WriteLine("further instances of this warning will be suppressed...");
+                    }
+                }
+            }
+            return Moab.ErrorCode.MB_SUCCESS;
+        }
+
+        Moab.ErrorCode add_edge_mesh(RefEdge edge, ICollection<Point> points, ref RefEntityHandleMap edge_map,
+                               ref RefEntityHandleMap vertex_map)
+        {
+            Moab.ErrorCode rval;
+            EntityHandle edgeHandle = edge_map[edge];
+            if (Moab.ErrorCode.MB_SUCCESS != check_edge_mesh(edge, points))
+                return Moab.ErrorCode.MB_FAILURE;
+
+            var curve = edge.GetGeometry<Curve>();  // the return may be null
+
+            // Todo: Need to reverse data but how?
+            //if (curve->bridge_sense() == CUBIT_REVERSED)
+            //    std::reverse(points.begin(), points.end());
+
+            RefVertex start_vtx, end_vtx;
+            start_vtx = edge.StartVertex;
+            end_vtx = edge.EndVertex;
+
+            // Special case for point curve, closed curve has only 1 point
+            if (points.Count < 2)
+            {
+                EntityHandle h = vertex_map[start_vtx];  // why, 
+                rval = myMoabInstance.AddEntities(edgeHandle, ref h, 1);
+                if (Moab.ErrorCode.MB_SUCCESS != rval)
+                    return Moab.ErrorCode.MB_FAILURE;
+            }
+
+            var segs = new List<EntityHandle>();
+            var verts = new List<EntityHandle>();
+            verts.Add(vertex_map[start_vtx]);  // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
+            foreach (var point in points)
+            {
+                EntityHandle h = UNINITIALIZED_HANDLE;
+                rval = add_vertex(point, ref h);
+                if (Moab.ErrorCode.MB_SUCCESS != rval)
+                    return Moab.ErrorCode.MB_FAILURE;
+                verts.Add(h);
+            }
+            verts.Add(vertex_map[end_vtx]); // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
+
+            EntityHandle[] meshVerts = verts.ToArray();
+            // Create edges, can this be skipped?
+            for (int i = 0; i < verts.Count - 1; ++i)
+            {
+                EntityHandle h = UNINITIALIZED_HANDLE;
+
+                rval = myMoabInstance.CreateElement(Moab.EntityType.MBEDGE, ref meshVerts[i], 2, ref h);
+                if (Moab.ErrorCode.MB_SUCCESS != rval)
+                    return Moab.ErrorCode.MB_FAILURE;
+                segs.Add(h);
+            }
+
+            // If closed, remove duplicate, must done after adding the meshedge
+            if (verts.First() == verts.Last())
+                verts.RemoveAt(verts.Count - 1);
+
+            // Add entities to the curve meshset from entitymap
+            rval = myMoabInstance.AddEntities(edgeHandle, ref meshVerts[0], meshVerts.Length);
+            if (Moab.ErrorCode.MB_SUCCESS != rval)
+                return Moab.ErrorCode.MB_FAILURE;
+            EntityHandle[] meshEdges = segs.ToArray();
+            rval = myMoabInstance.AddEntities(edgeHandle, ref meshEdges[0], meshEdges.Length);
+            if (Moab.ErrorCode.MB_SUCCESS != rval)
+                return Moab.ErrorCode.MB_FAILURE;
+
+            return Moab.ErrorCode.MB_SUCCESS;
+        }
+
+
+        Moab.ErrorCode add_surface_mesh(in RefFace face, in FaceTessellation t, EntityHandle faceHandle, ref RefEntityHandleMap vertex_map)
+        {
+            Moab.ErrorCode rval;
+
+            int nPoint = t.Vertices.Count;
+            int nFacet = t.Facets.Count;
+            // record the failures for information
+            if (nFacet == 0)
+            {
+                failed_surface_count++;
+                failed_surfaces.Add(face.GetHashCode());
+            }
+
+            var hVerts = new EntityHandle[nPoint];  // vertex id in MOAB
+            var pointData = t.Vertices;
+
+            // For each geometric vertex, find a single coincident point in facets, Otherwise, print a warning
+            // i.e. find the vertices on edge/curve which have been added into MOAB during add_edge_mesh(),
+            // wont a hash matching faster?
+            foreach (var v in vertex_map.Keys)
+            {
+                var pos = ((RefVertex)v).Position;
+                for (int j = 0; j < nPoint; ++j)
+                {
+                    hVerts[j] = UNINITIALIZED_HANDLE;
+                    if ((pos - pointData[j].Position).Magnitude < GEOMETRY_RESABS)  // length_square < GEOMETRY_RESABS*GEOMETRY_RESABS
+                    {
+                        hVerts[0] = vertex_map[v];
+                    }
+                    else
+                    {
+                        message.WriteLine("Warning: Coincident vertices in surface {}, for the point at {}", face.GetHashCode(), pos);
+                    }
+                }
+            }
+
+            for(int i = 0; i< nPoint; i++)
+            {
+                if (hVerts[i] == UNINITIALIZED_HANDLE) // not found existing vertex in MOAB database
+                {
+                    EntityHandle h = UNINITIALIZED_HANDLE;
+                    add_vertex(pointData[i].Position, ref h);
+                    //vertex_map[] = h;
+                    hVerts[i] = h;
+                }
+            }
+
+            var hFacets = new List<EntityHandle>(); // [nFacet];
+            EntityHandle[] tri = new EntityHandle[3];
+            foreach (Facet facet in t.Facets)  // C++ Cubit: (int i = 0; i < facet_list.size(); i += facet_list[i] + 1)
+            {
+                var type = Moab.EntityType.MBTRI;  // in SpaceClaim it must be triangle
+                tri[0] = hVerts[facet.Vertex0];  // todo: debug to see if facet.Vertex0 starts with zero!
+                tri[1] = hVerts[facet.Vertex1];
+                tri[2] = hVerts[facet.Vertex2];
+
+                EntityHandle h = UNINITIALIZED_HANDLE;
+                rval = myMoabInstance.CreateElement(type, ref tri[0], tri.Length, ref h);
+                if (Moab.ErrorCode.MB_SUCCESS != rval)
+                    return Moab.ErrorCode.MB_FAILURE;
+                hFacets.Add(h);
+            }
+
+            // Add entities to the curve meshset from entitymap
+            EntityHandle[] meshVerts = hVerts;
+            rval = myMoabInstance.AddEntities(faceHandle, ref meshVerts[0], meshVerts.Length);
+            if (Moab.ErrorCode.MB_SUCCESS != rval)
+                return Moab.ErrorCode.MB_FAILURE;
+            EntityHandle[] meshFaces = hFacets.ToArray();
+            rval = myMoabInstance.AddEntities(faceHandle, ref meshFaces[0], meshFaces.Length);
+            if (Moab.ErrorCode.MB_SUCCESS != rval)
+                return Moab.ErrorCode.MB_FAILURE;
+
+            return Moab.ErrorCode.MB_SUCCESS;
+        }
+
+        /// create_curve_facets() moved here for performance and diff API design in SpaceClaim
+        Moab.ErrorCode create_surface_facets(ref RefEntityHandleMap surface_map, ref RefEntityHandleMap edge_map,
                                              ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
-            /*
-                    refentity_handle_map_itor ci;
-                    CubitStatus s;   // should be type alias
-                    failed_surface_count = 0;
 
-                    DLIList<TopologyEntity*> me_list;
+            TessellationOptions meshOptions = new TessellationOptions();
+            List<RefBody> allBodies = (List<RefBody>)TopologyEntities[VOLUME_INDEX];
+            foreach (var body in allBodies)
+            {
+                Moab.Range facet_entities = new Moab.Range();
 
-                    GMem data;
-                    // Create geometry for all surfaces
-                    for (ci = surface_map.begin(); ci != surface_map.end(); ++ci)
-                    {
-                        RefFace* face = dynamic_cast<RefFace*>(ci->first);
-
-                        data.clear();
-                        s = face->get_graphics(data, norm_tol, faceting_tol, len_tol);
-
-                        if (CUBIT_SUCCESS != s)
-                            return Moab.ErrorCode.MB_FAILURE;
-
-                        std::vector<CubitVector> points = data.point_list();    // std::vector<CubitVector> should be type alias
-
-                        // Declare array of all vertex handles
-                        std::vector<moab::EntityHandle> verts(points.size(), 0);
-
-                // Get list of geometric vertices in surface
-                me_list.clean_out();
-                ModelQueryEngine::instance()->query_model(*face, DagType::ref_vertex_type(), me_list);
-
-                // For each geometric vertex, find a single coincident point in facets
-                // Otherwise, print a warning
-                for (int i = me_list.size(); i--;)
+                /// may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
+                foreach (var kv in body.GetEdgeTessellation(body.Shape.Edges))
                 {
-                    // Assign geometric vertex
-                    RefVertex* vtx = dynamic_cast<RefVertex*>(me_list.get_and_step());
-                    CubitVector pos = vtx->coordinates();
-
-                    for (int j = 0; j < points.size(); ++j)
-                    {
-                        // Assign facet vertex
-                        CubitVector vpos = points[j];
-
-                        // Check to see if they are considered coincident
-                        if ((pos - vpos).length_squared() < GEOMETRY_RESABS * GEOMETRY_RESABS)
-                        {
-                            // If this facet vertex has already been found coincident, print warning
-                            if (verts[j])
-                            {
-                                message.WriteLine("Warning: Coincident vertices in surface " << face->id() ; ;
-                            }
-                            // If a coincidence is found, keep track of it in the verts vector
-                            verts[j] = vertex_map[vtx];
-                            break;
-                        }
-                    }
+                    add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
                 }
 
-                // Now create vertices for the remaining points in the facetting
-                for (int i = 0; i < points.size(); ++i)
+                foreach (var kv in body.Shape.GetTessellation(body.Shape.Faces, meshOptions))
                 {
-                    if (verts[i]) // If a geometric vertex
-                        continue;
-                    double coords[] = { points[i].x(), points[i].y(), points[i].z() };
-                    // Return vertex handle to verts to fill in all remaining facet
-                    // vertices
-                    rval =myMoabInstance.create_vertex(coords, verts[i]);
-                    if (Moab.ErrorCode.MB_SUCCESS != rval)
-                        return rval;
+                    var face = kv.Key;
+                    EntityHandle faceHandle = surface_map[face];
+                    FaceTessellation t = kv.Value;
+                    add_surface_mesh(face, t, faceHandle, ref vertex_map);
+
                 }
-
-                std::vector<int> facet_list = data.facet_list();
-
-                // record the failures for information
-                if (facet_list.size() == 0)
-                {
-                    failed_surface_count++;
-                    failed_surfaces.push_back(face->id());
-                }
-
-                // Now create facets
-                Moab.Range facets = new Moab.Range();
-                std::vector<EntityHandle> corners;
-                for (int i = 0; i < facet_list.size(); i += facet_list[i] + 1)
-                {
-                    // Get number of facet verts
-                    int num_verts = facet_list[i];
-                    corners.resize(num_verts);
-                    for (int j = 1; j <= num_verts; ++j)
-                    {
-                        if (facet_list[i + j] >= (int)verts.size())
-                        {
-                            message.WriteLine("ERROR: Invalid facet data for surface " << face->id() ; ;
-                            return Moab.ErrorCode.MB_FAILURE;
-                        }
-                        corners[j - 1] = verts[facet_list[i + j]];
-                    }
-                    Moab.EntityType type;
-                    if (num_verts == 3)
-                        type = Moab.EntityType.MBTRI;
-                    else
-                    {
-                        message.WriteLine("Warning: non-triangle facet in surface " << face->id() ; ;
-                        message.WriteLine("  entity has " << num_verts << " edges" ; ;
-                        if (num_verts == 4)
-                            type = Moab.EntityType.MBQUAD;
-                        else
-                            type = Moab.EntityType.MBPOLYGON;
-                    }
-
-                    //if (surf->bridge_sense() == CUBIT_REVERSED)
-                    //std::reverse(corners.begin(), corners.end());
-
-                    EntityHandle h;
-                    rval =myMoabInstance.CreateElement(type, &corners[0], corners.size(), ref h);
-                    if (Moab.ErrorCode.MB_SUCCESS != rval)
-                        return Moab.ErrorCode.MB_FAILURE;
-
-                    facets.insert(h);
-                }
-
-                // Add vertices and facets to surface set
-                rval = myMoabInstance.AddEntities(ci->second, &verts[0], verts.size());
-                if (Moab.ErrorCode.MB_SUCCESS != rval)
-                    return Moab.ErrorCode.MB_FAILURE;
-                rval = myMoabInstance.AddEntities(ci->second, facets);
-                if (Moab.ErrorCode.MB_SUCCESS != rval)
-                    return Moab.ErrorCode.MB_FAILURE;
-                  }
-                */
+            }
 
             return Moab.ErrorCode.MB_SUCCESS;
         }

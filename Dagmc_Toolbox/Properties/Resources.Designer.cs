@@ -61,11 +61,67 @@ namespace Dagmc_Toolbox.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to &lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot; ?&gt;&lt;AddIns&gt;&lt;AddIn name=&quot;Sample Add-In&quot; description=&quot;Loaded from a journal file.&quot; assembly=&quot;Samples\V16\SampleAddIn\SampleAddIn.dll&quot; typename=&quot;SpaceClaim.Api.V18.Examples.SampleAddIn&quot; host=&quot;SameAppDomain&quot; /&gt;&lt;/AddIns&gt;.
+        ///   Looks up a localized string similar to &lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot; ?&gt;&lt;AddIns&gt;&lt;AddIn name=&quot;Sample Add-In&quot; description=&quot;Loaded from a journal file.&quot; assembly=&quot;Samples\V16\SampleAddIn\SampleAddIn.dll&quot; typename=&quot;SpaceClaim.Api.V19.Examples.SampleAddIn&quot; host=&quot;SameAppDomain&quot; /&gt;&lt;/AddIns&gt;.
         /// </summary>
         internal static string AddInManifestInfo {
             get {
                 return ResourceManager.GetString("AddInManifestInfo", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap CheckGeometry {
+            get {
+                object obj = ResourceManager.GetObject("CheckGeometry", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Check Geometry before export for CAE simulation.
+        /// </summary>
+        internal static string CheckGeometryHint {
+            get {
+                return ResourceManager.GetString("CheckGeometryHint", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Check Geometry.
+        /// </summary>
+        internal static string CheckGeometryText {
+            get {
+                return ResourceManager.GetString("CheckGeometryText", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap CreateGroup {
+            get {
+                object obj = ResourceManager.GetObject("CreateGroup", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Create a DAGMC group from selected geometry.
+        /// </summary>
+        internal static string CreateGroupHint {
+            get {
+                return ResourceManager.GetString("CreateGroupHint", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Creat Group.
+        /// </summary>
+        internal static string CreateGroupText {
+            get {
+                return ResourceManager.GetString("CreateGroupText", resourceCulture);
             }
         }
         

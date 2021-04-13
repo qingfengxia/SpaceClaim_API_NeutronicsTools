@@ -27,31 +27,17 @@
 						of the Command object is used.
 					-->
                         <button id="Dagmc_Toolbox.C#.V18.ExportDagmc" size="large" command="Dagmc_Toolbox.C#.V18.ExportDagmc"/>
-					    <button id="CCFE_Toolbox.C#.V18.PrintUid" size="large" command="CCFE_Toolbox.C#.V18.PrintUid"/>
+					    <button id="Dagmc_Toolbox.C#.V18.PrintUid" size="large" command="Dagmc_Toolbox.C#.V18.PrintUid"/>
+						<button id="Dagmc_Toolbox.C#.V18.CheckGeometry" size="large" command="Dagmc_Toolbox.C#.V18.CheckGeometry"/>
                     </group>
 
         <!--
-				<group id="SampleAddIn.C#.V13.AnnotateGroup" label="Annotate">
-					<button id="SampleAddIn.C#.V13.CreateNotes" size="large" command="SampleAddIn.C#.V13.CreateNotes"/>
-					<button id="SampleAddIn.C#.V13.CreateLayers" size="large" command="SampleAddIn.C#.V13.CreateLayers"/>
-				</group>
-				<group id="SampleAddIn.C#.V13.SelectGroup" label="Select">
-					<button id="SampleAddIn.C#.V13.FindMatchingFaces" size="large" command="SampleAddIn.C#.V13.FindMatchingFaces"/>
-					<button id="SampleAddIn.C#.V13.SelectLoop" size="large" command="SampleAddIn.C#.V13.SelectLoop"/>
-				</group>
+
 				<group id="SampleAddIn.C#.V13.GraphicsGroup" label="Graphics">
 					<button id="SampleAddIn.C#.V13.PolygonMesh" size="large" command="SampleAddIn.C#.V13.PolygonMesh"/>
 					<button id="SampleAddIn.C#.V13.SceneGraph" size="large" command="SampleAddIn.C#.V13.SceneGraph"/>
 					<button id="SampleAddIn.C#.V13.DeviationTool" size="large" command="SampleAddIn.C#.V13.DeviationTool"/>
 				</group>
-				<group id="SampleAddIn.C#.V13.OtherGroup" label="Other">
-          <button id="SampleAddIn.C#.V13.ImportBody" size="large" command="SampleAddIn.C#.V13.ImportBody"/>
-          <button id="SampleAddIn.C#.V13.Export" size="large" command="SampleAddIn.C#.V13.Export"/>
-          <button id="SampleAddIn.C#.V13.DumpObject" size="large" command="SampleAddIn.C#.V13.DumpObject"/>
-          <button id="SampleAddIn.C#.V13.SketchTool" size="large" command="SampleAddIn.C#.V13.SketchTool"/>
-          <button id="SampleAddIn.C#.V13.CustomTool" size="large" command="SampleAddIn.C#.V13.CustomTool"/>
-					<button id="SampleAddIn.C#.V13.CreateDesignRules" size="large" command="SampleAddIn.C#.V13.CreateDesignRules"/>
-        </group>
         -->
 			</tab>
 		</tabs>

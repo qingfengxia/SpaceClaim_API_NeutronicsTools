@@ -40,6 +40,10 @@
     <ProjectReference Include="D:\MyData\StepMultiphysics\DAGMC_Plugin\MOABSharp\MOABSharp\MOABSharp.csproj">
       <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
     </ProjectReference>
+    <Reference Include="Commands, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\Commands.dll</HintPath>
+    </Reference>
     <Reference Include="CppSharp.Runtime">
       <HintPath>..\..\MOABSharp\MOABSharp\bin\Debug\netstandard2.0\CppSharp.Runtime.dll</HintPath>
     </Reference>
@@ -47,14 +51,16 @@
       <HintPath>..\..\MOABSharp\MOABSharp\bin\Debug\netstandard2.0\MOABSharp.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
-    <Reference Include="SpaceClaim.Api.V18, Version=18.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+    <Reference Include="SpaceClaim.Api.V19, Version=19.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V18\SpaceClaim.Api.V18.dll</HintPath>
-      <Private>True</Private>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V19\SpaceClaim.Api.V19.dll</HintPath>
     </Reference>
-    <Reference Include="SpaceClaim.Api.V18.Scripting">
-      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V18.Scripting.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="SpaceClaim.Api.V19.Scripting">
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Api.V19.Scripting.dll</HintPath>
+    </Reference>
+    <Reference Include="SpaceClaim.Foundation, Version=14.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Foundation.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -70,28 +76,39 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Commands\CheckGeometry.cs" />
+    <Compile Include="Commands\CreateGroup.cs" />
     <Compile Include="Commands\DagmcExportor.cs" />
     <Compile Include="Commands\PrintUid.cs" />
     <Compile Include="Dagmc_Toolbox.Helper.cs" />
+    <Compile Include="Dagmc_Toolbox.Types.cs" />
     <!-- generated cs files, must be compiled before use the in Addin.cs -->
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-      <DependentUpon>Settings.settings</DependentUpon>
-    </Compile>
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <DependentUpon>Settings.settings</DependentUpon>
+    </Compile>
     <Compile Include="Commands\ExportDagmc.cs" />
     <Compile Include="Dagmc_Toolbox_AddIn.cs" />
+    <Compile Include="UI\GroupCreationForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\GroupCreationForm.Designer.cs">
+      <DependentUpon>GroupCreationForm.cs</DependentUpon>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Content Include="Dagmc_Toolbox_Manifest.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="Resources\CheckGeometry.png" />
+    <None Include="Resources\CreateGroup.png" />
     <None Include="Resources\PrintUid.png" />
     <None Include="DevNote_Trelis DAGMC plugin porting  to SpaceClaim.md" />
     <None Include="packages.config" />
@@ -117,6 +134,9 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <SubType>Designer</SubType>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UI\GroupCreationForm.resx">
+      <DependentUpon>GroupCreationForm.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

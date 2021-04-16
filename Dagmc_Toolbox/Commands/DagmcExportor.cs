@@ -9,13 +9,13 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Xml.Serialization;
 using System.Windows.Forms;
-using SpaceClaim.Api.V18.Extensibility;
-using SpaceClaim.Api.V18.Geometry;
-using SpaceClaim.Api.V18.Modeler;
-using SpaceClaim.Api.V18;
-using SpaceClaim.Api.V18.Scripting;
-using SpaceClaim.Api.V18.Scripting.Commands;
-using Point = SpaceClaim.Api.V18.Geometry.Point;
+using SpaceClaim.Api.V19.Extensibility;
+using SpaceClaim.Api.V19.Geometry;
+using SpaceClaim.Api.V19.Modeler;
+using SpaceClaim.Api.V19;
+using SpaceClaim.Api.V19.Scripting;
+using SpaceClaim.Api.V19.Scripting.Commands;
+using Point = SpaceClaim.Api.V19.Geometry.Point;
 
 using Moab = MOAB.Moab;
 using static MOAB.Constants;
@@ -25,16 +25,16 @@ using message = System.Diagnostics.Debug;
 using EntityHandle = System.UInt64;   // type alias is only valid in the source file!
 
 /// type alias to help Cubit/Trelis developers to understand SpaceClaim API
-///using RefEntity = SpaceClaim.Api.V18.Geometry.IShape;
-using RefGroup = SpaceClaim.Api.V18.Group;   /// SpaceClaim.Api.V18.Group;
-using RefEntity = SpaceClaim.Api.V18.Modeler.Topology;
+///using RefEntity = SpaceClaim.Api.V19.Geometry.IShape;
+using RefGroup = SpaceClaim.Api.V19.Group;   /// SpaceClaim.Api.V19.Group;
+using RefEntity = SpaceClaim.Api.V19.Modeler.Topology;
 // RefVolume ?
-using RefBody = SpaceClaim.Api.V18.DesignBody;
-using RefFace = SpaceClaim.Api.V18.Modeler.Face;
-using RefEdge = SpaceClaim.Api.V18.Modeler.Edge;
-using RefVertex = SpaceClaim.Api.V18.Modeler.Vertex;
+using RefBody = SpaceClaim.Api.V19.DesignBody;
+using RefFace = SpaceClaim.Api.V19.Modeler.Face;
+using RefEdge = SpaceClaim.Api.V19.Modeler.Edge;
+using RefVertex = SpaceClaim.Api.V19.Modeler.Vertex;
 using Primitive = System.Double;
-using SpaceClaim.Api.V18.Scripting.Commands.CommandOptions;
+using SpaceClaim.Api.V19.Scripting.Commands.CommandOptions;
 
 /// RefEntity:  ref to CubitEntity 
 //typedef std::map<RefEntity*, moab::EntityHandle> refentity_handle_map;
@@ -83,6 +83,7 @@ namespace Dagmc_Toolbox
         readonly int GROUP_INDEX = 4;
         object[] TopologyEntities;
 
+        // todo  attach file log to Debug/Trace to get more info from GUI
         static readonly EntityHandle UNINITIALIZED_HANDLE = 0;
         internal class EntitityTopology
         {
@@ -123,7 +124,7 @@ namespace Dagmc_Toolbox
         /// <summary>
         /// in C++, all these Tag, typedef of TagInfo*, initialized to zero (nullptr)
         /// </summary>
-        Moab.TagInfo geom_tag, id_tag, name_tag, category_tag, faceting_tol_tag, geometry_resabs_tag;
+        Moab.Tag geom_tag, id_tag, name_tag, category_tag, faceting_tol_tag, geometry_resabs_tag;
 
         DagmcExporter()
         {
@@ -359,7 +360,7 @@ namespace Dagmc_Toolbox
             // TODO this print_message() should have a function to hide impl
             //message.str("");  // not needed
 
-            Moab.ErrorCode rval = myMoabInstance.DeleteMesh();   // todo MOABSharp, it is a method, not property!
+            Moab.ErrorCode rval = myMoabInstance.DeleteMesh;   // todo MOABSharp, it is a method, not property!
             CHK_MB_ERR_RET_MB("Error cleaning up mesh instance.", rval);
             //delete myGeomTool;  not needed
 

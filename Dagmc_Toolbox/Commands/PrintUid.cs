@@ -5,13 +5,13 @@ using System.Text;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Reflection;
-using SpaceClaim.Api.V18.Extensibility;
-using SpaceClaim.Api.V18.Geometry;
-using SpaceClaim.Api.V18.Modeler;
-using SpaceClaim.Api.V18;
-using SpaceClaim.Api.V18.Display;
-using Point = SpaceClaim.Api.V18.Geometry.Point;
-using SpaceClaim.Api.V18.Scripting;
+using SpaceClaim.Api.V19.Extensibility;
+using SpaceClaim.Api.V19.Geometry;
+using SpaceClaim.Api.V19.Modeler;
+using SpaceClaim.Api.V19;
+using SpaceClaim.Api.V19.Display;
+using Point = SpaceClaim.Api.V19.Geometry.Point;
+using SpaceClaim.Api.V19.Scripting;
 using Dagmc_Toolbox.Properties;
 
 namespace Dagmc_Toolbox.Commands
@@ -23,8 +23,8 @@ namespace Dagmc_Toolbox.Commands
         // This command name must match that in the Ribbon.xml file
         //----------------------------------------------------------
         public bool first = true;
-        public string ScriptRelPath = @"PythonScripts\PrintUid.scsript";
-        public const string CommandName = "CCFE_Toolbox.C#.V18.PrintUid";
+        public string ScriptRelPath = @"PythonScripts\PrintUid.scscript";
+        public const string CommandName = "Dagmc_Toolbox.C#.V18.PrintUid";
 
         public PrintUid() : base(CommandName, Resources.PrintUidText, Resources.PrintUid, Resources.PrintUidHint)
         {
@@ -33,7 +33,8 @@ namespace Dagmc_Toolbox.Commands
 
         protected override void OnExecute(Command command, ExecutionContext context, Rectangle buttonRect)
         {
-            string assemblyDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+            var l = Assembly.GetAssembly(typeof(PrintUid)).Location;
+            string assemblyDir = Path.GetDirectoryName(l);
             var scriptPath = Path.Combine(assemblyDir, ScriptRelPath);
             if (File.Exists(scriptPath))
             {
@@ -48,8 +49,8 @@ namespace Dagmc_Toolbox.Commands
                 //scriptParams.Add("mf", maxfaces);
 
                 // Run the script
-                SpaceClaim.Api.V18.Application.RunScript(scriptPath, scriptParams);
-                MessageBox.Show($"ERROR: Script file {scriptPath} called successfully");
+                SpaceClaim.Api.V19.Application.RunScript(scriptPath, scriptParams);
+                MessageBox.Show($"INFO: Script file {scriptPath} called successfully");
             }
             else
             {

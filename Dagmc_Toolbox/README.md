@@ -71,3 +71,19 @@ to avoid merge confliction on some resource and xml files.  In the future, DAMGC
 + Copy all DAGMC related business code,  add these files as **Existing files** in the target AddIn's C# project in visual studio
 + Resources:  icon files, Ribbon.xml,  Manifest.xml will be updagted automatically?
 + Properties/
+
+### API.V19 is needed for GeometryCheck
+
+V18 may be used by call a script with GeometryCheck API in IronPython 
+Alternative, use Internal method of V18.
+
+### Parallel processing
+
+It might be that API in Scripting namespace, may can only run in MainThread.
+
+### Debug and Unit test
+
+In visual studio, select SpaceClaim.exe as the start up propraom in the  "Debug" page in a project property.
+Start the debug process normally, the debug should stop at breakpoint in the user source code file as user operates 
+
+SpaceClaim.exe has batch mode to run IronPython script, which may be used for unit test..

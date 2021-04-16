@@ -5,13 +5,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Drawing;
-using SpaceClaim.Api.V18.Extensibility;
-using SpaceClaim.Api.V18.Geometry;
-using SpaceClaim.Api.V18.Modeler;
+using SpaceClaim.Api.V19.Extensibility;
+using SpaceClaim.Api.V19.Geometry;
+using SpaceClaim.Api.V19.Modeler;
 using System.Xml.Serialization;
 using System.Windows.Forms;
-using SpaceClaim.Api.V18;
-using Point = SpaceClaim.Api.V18.Geometry.Point;
+using SpaceClaim.Api.V19;
+using Point = SpaceClaim.Api.V19.Geometry.Point;
 using System.Diagnostics;
 
 
@@ -300,7 +300,7 @@ namespace Dagmc_Toolbox.Commands
                     filter = filter.TrimEnd('|');
                     fileDialog.Filter = filter;
 
-                    if (fileDialog.ShowDialog(SpaceClaim.Api.V18.Application.MainWindow) != DialogResult.OK)
+                    if (fileDialog.ShowDialog(SpaceClaim.Api.V19.Application.MainWindow) != DialogResult.OK)
                         return; // user canceled
 
                     // get the data the user entered

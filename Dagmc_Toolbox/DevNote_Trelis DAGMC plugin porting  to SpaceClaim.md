@@ -84,6 +84,22 @@ class RefEdge;
 class RefVertex;
 ```
 
+Cubit has `Body` class contains `RefVolume`
+
+```c++
+//! RefVolume class.
+class CUBIT_GEOM_EXPORT RefVolume : public BasicTopologyEntity
+{
+public :
+  
+  typedef RefFace ChildType;
+  typedef Body ParentType;
+
+
+  //! Body class.
+class CUBIT_GEOM_EXPORT Body : public GroupingEntity,  public RefEntity
+```
+
 ### No one-by-one corresponding API
 + SpaceClaim Curve meshing
 `DesignBody has GetEdgeTEssellation` while Cubut edge has EdgeTEssellation
@@ -127,9 +143,31 @@ MeshLoop,  a collection of MeshEdge
 MeshRegion, a collection of MeshFace
 MeshTopology
 
+
+## Todo
 ### ID in Cubit  mapped to what kind of ID in SpaceClaim?
-face->id()  id is a hash function?
+face->id()  id is a hash function? this ID may change if face is modified.
 
 Currently, `Object.GetHashCode()` in C# is used.
 
+### Mesh on Shared face may has been writen twice
 
+needs to find a way to detect shared interior face, then save triangle once mesh.
+
+vertex hash may need. 
+
+FaceTesselation may not generate for shared face between bodies,    non-manifold
+
+### Curve and Face sense/side-ness, etc 
+
+No API has been found for Face and Curve.
+
+
+### Unit test
+
+spaceclaim may run IronPython file in batch mode?
+
+### Weekly project update 
+
+before the Kanban board ready, excel to update
+https://ukaeauk.sharepoint.com/:x:/r/sites/STEP_DigitalEnablers_B2_2_1/_layouts/15/doc2.aspx?sourcedoc=%7B3006A85A-4554-4518-9255-4238FDA414F9%7D&file=Weekly%20Standup.xlsx&action=default&mobileredirect=true&cid=dbc507af-f7b4-4d2c-95a1-a18a0c1fd37b

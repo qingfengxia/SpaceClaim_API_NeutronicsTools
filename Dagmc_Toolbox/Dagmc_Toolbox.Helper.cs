@@ -6,13 +6,13 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Drawing;
 using System.Diagnostics;
-using SpaceClaim.Api.V18.Extensibility;
-using SpaceClaim.Api.V18.Geometry;
-using SpaceClaim.Api.V18.Modeler;
+using SpaceClaim.Api.V19.Extensibility;
+using SpaceClaim.Api.V19.Geometry;
+using SpaceClaim.Api.V19.Modeler;
 using System.Xml.Serialization;
 using System.Windows.Forms;
-using SpaceClaim.Api.V18;
-using Point = SpaceClaim.Api.V18.Geometry.Point;
+using SpaceClaim.Api.V19;
+using Point = SpaceClaim.Api.V19.Geometry.Point;
 
 using Dagmc_Toolbox.Properties;
 
@@ -29,13 +29,13 @@ namespace Dagmc_Toolbox
             //doc.MainPart.GetDescendants<Group>();  // group belongs to Part, a collection of DocObject
             return doc.MainPart;
         }
-        static public List<T> GatherAllEntities<T>(IPart part) where T: DocObject
+        static public List<T> GatherAllEntities<T>(IPart part) where T : DocObject
         {
             var allEntities = new List<T>();
             allEntities.AddRange(part.GetDescendants<T>());
             return allEntities;
         }
-        
+
         static public List<IDesignBody> GatherAllVisibleBodies(IPart part, Window window)
         {
             List<IDesignBody> allBodies = new List<IDesignBody>();
@@ -51,16 +51,82 @@ namespace Dagmc_Toolbox
             return allBodies;
         }
 
-        static public List<IDesignBody> GatherSelectionBodies(InteractionContext context )
+        static public ICollection<T> GatherSelectedObjects<T>(InteractionContext context) where T : DocObject
         {
-            var iBodies = new List<IDesignBody>();
+            var docObjects = new List<T>();
             var selection = context.Selection;
-            foreach (IDesignBody body in selection)
+            foreach (DocObject o in selection)
             {
-                iBodies.Add(body);
+                if ((T)o != null)
+                    docObjects.Add((T)o);
             }
-            return iBodies;
+            return docObjects;
         }
+
+        static public ICollection<Group> GatherAllGroups(IPart part = null)
+        {
+            //if (part != null)
+            //{
+            //    part.Document.Wind
+            //}
+            return Window.ActiveWindow.Groups;
+        }
+
+        static public Group SelectGroup(string existingGroupName)
+        {
+            foreach (var group in GatherAllGroups())
+            {
+                if (group.Name == existingGroupName)
+                {
+                    return group;
+                }
+            }
+            return null;
+        }
+
+        static public bool RemoveGroup(string existingGroupName)
+        {
+            SpaceClaim.Api.V19.Scripting.Commands.NamedSelection.Delete(existingGroupName);
+            return true;
+        }
+
+        static public void ReportMessage(string message)
+        {
+            // SpaceClaim.exe may only accessible by IronPython
+            //SpaceClaim.UserInterface.Session.Current.StatusQueue.ReportStatus(message, StatusMessageType.Information);
+        }
+
+        static public bool AppendToGroup(ICollection<IDocObject> objects, string existingGroupName)
+        {
+            var group = SelectGroup(existingGroupName);
+            string tmpGroupName = "__tmpGroupToAadd";
+            if (group != null)
+            {
+                foreach (var o in group.Members)
+                    objects.Add(o);
+                // group.Members is fixed sized collection, can not be added
+                var g = Group.Create(Helper.GetActiveMainPart(), tmpGroupName, objects);
+                if (!RemoveGroup(existingGroupName))
+                {
+                    Debug.WriteLine("Failed to remove a group with name {}", existingGroupName);
+                    group.Name = "__groupFailedToRemove(try_manually)";
+                }
+                g.Name = existingGroupName;
+                return true;
+            }
+            return false;
+        }
+
+        static public void ColorizeGroup(Group group, Color color)
+        {
+            foreach(var o in group.Members)
+            {
+                if(o is IHasColor)
+                    ((IHasColor)o).SetColor(null, color);
+            }
+        }
+
+        //============================== remove below if not in use later =================================
 
         static public List<Body> CopyIDesign(List<IDesignBody> iDesBods)
         {

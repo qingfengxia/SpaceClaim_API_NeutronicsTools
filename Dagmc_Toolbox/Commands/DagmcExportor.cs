@@ -29,7 +29,7 @@ using EntityHandle = System.UInt64;   // type alias is only valid in the source 
 using RefGroup = SpaceClaim.Api.V19.Group;   /// Group is not derived from Modeler.Topology
 using RefEntity = SpaceClaim.Api.V19.Modeler.Topology;
 // RefVolume has no mapping in SpaceClaim
-using RefBody = SpaceClaim.Api.V19.DesignBody;
+using RefBody = SpaceClaim.Api.V19.Modeler.Body;
 using RefFace = SpaceClaim.Api.V19.Modeler.Face;
 using RefEdge = SpaceClaim.Api.V19.Modeler.Edge;
 using RefVertex = SpaceClaim.Api.V19.Modeler.Vertex;
@@ -70,27 +70,122 @@ namespace Dagmc_Toolbox
         int failed_surface_count;
         List<int> failed_surfaces;
 
-
-        /// GEOMETRY_RESABS - If the distance between two points is less 
-        /// than GEOMETRY_RESABS the points are considered to be identical.
-        readonly double GEOMETRY_RESABS = 1.0E-6;  /// Trelis SDK /utl/GeometryDefines.h
-
-        readonly string[] GEOMETRY_NAMES = { "Vertex", "Curve", "Surface", "Volume", "Group"};
-        readonly int VERTEX_INDEX = 0;
-        readonly int CURVE_INDEX = 1;
-        readonly int SURFACE_INDEX = 2;
-        readonly int VOLUME_INDEX = 3;
-        readonly int GROUP_INDEX = 4;
-        object[] TopologyEntities;
-
-        // todo  attach file log to Debug/Trace to get more info from GUI
-        static readonly EntityHandle UNINITIALIZED_HANDLE = 0;
-
         /// <summary>
         /// in C++, all these Tag, typedef of TagInfo*, initialized to zero (nullptr)
         /// </summary>
         Moab.Tag geom_tag, id_tag, name_tag, category_tag, faceting_tol_tag, geometry_resabs_tag;
 
+        // todo  attach file log to Debug/Trace to get more info from GUI
+        static readonly EntityHandle UNINITIALIZED_HANDLE = 0;
+
+        /// GEOMETRY_RESABS - If the distance between two points is less 
+        /// than GEOMETRY_RESABS the points are considered to be identical.
+        readonly double GEOMETRY_RESABS = 1.0E-6;  /// Trelis SDK /utl/GeometryDefines.h
+
+        #region TopologyMap
+        readonly string[] GEOMETRY_NAMES = { "Vertex", "Curve", "Surface", "Volume", "Group"};
+        /// <summary>
+        /// NOTE const instead of readonly, because const int is needed in switch case loop
+        /// </summary>
+        const int VERTEX_INDEX = 0;
+        const int CURVE_INDEX = 1;
+        const int SURFACE_INDEX = 2;
+        const int VOLUME_INDEX = 3;
+        const int GROUP_INDEX = 4;
+        /// <summary>
+        /// Group and other topology types do not derived from the same RefEntity base class! but System.Object
+        /// </summary>
+        object[] TopologyEntities;  
+
+        /// <summary>
+        /// private helper function to initialize the TopologyEntities data structure
+        /// assuming all topology objects are within the ActivePart in the ActiveDocument
+        /// </summary>
+        /// <returns></returns>
+        private object[] generate_topoloyg_map()
+        {
+            Part part = Helper.GetActiveMainPart();  // todo: can a document have multiple Parts?
+            var allBodies = Helper.GatherAllEntities<DesignBody>(part);
+            List<RefBody> bodies = allBodies.ConvertAll<RefBody>(o => o.Shape);
+            foreach(var b in allBodies)
+            {
+                BodyToDesignBodyMap[b.Shape] = b;
+            }
+
+            // todo:  there is anther way to get all Faces, adding all Faces of body together,
+            // needs unit test to check the diff, and face count. 
+            List<RefFace> surfaces = Helper.GatherAllEntities<DesignFace>(part).ConvertAll<RefFace>(o => o.Shape);
+            List<RefEdge> edges = Helper.GatherAllEntities<DesignEdge>(part).ConvertAll<RefEdge>(o => o.Shape);
+            List<RefEntity> vertices = new List<RefEntity>();  // There is no DesignVertex class
+            foreach(var e in edges)
+            {
+                vertices.AddRange(GetEdgeVertices(e));
+            }
+            
+            // Helper.GatherAllEntities<DesignVertex>(part).ConvertAll<RefVertex>(o => o.Shape);
+            List<RefGroup> groups = Helper.GatherAllEntities<RefGroup>(part);
+            object[] entities = { vertices, edges, surfaces, bodies, groups };
+            return entities;
+        }
+
+
+        List<RefEntity> GetEdgeVertices(in RefEdge edge)
+        {
+            List<RefEntity> v = new List<RefEntity>();
+            v.Add(edge.StartVertex);
+            v.Add(edge.EndVertex);  // todo: some edge has only one Vertex!
+            return v;
+        }
+
+        List<RefEntity> GetBodiesInGroup(in RefGroup group)
+        {
+            List<RefEntity> v = new List<RefEntity>();
+            // todo
+            return v;
+        }
+
+        /*  List<X> cast to List<Y> will create a new List, not efficient
+        ///  https://stackoverflow.com/questions/5115275/shorter-syntax-for-casting-from-a-listx-to-a-listy
+        ///  Array<X> to Array<Y> ?
+        */
+        /// <summary>
+        /// </summary>
+        /// <remarks> 
+        /// this method correponding to Cubit API Entity.get_child_ref_entities()
+        /// </remarks>
+        /// <param name="ent"></param>
+        /// <param name="entity_type_id"></param>
+        /// <returns></returns>
+        List<RefEntity> get_child_ref_entities(RefEntity ent, int entity_dim)
+        {
+            switch (entity_dim)
+            {
+                case 1:
+                    return GetEdgeVertices((RefEdge)ent);
+                case 2:  // ID entity is edge
+                    return ((RefFace)ent).Edges.Cast<RefEntity>().ToList();
+                case 3:
+                    return ((RefBody)ent).Faces.Cast<RefEntity>().ToList();
+                case 4: // Group of Cubit, no such in SpaceClaim
+                    throw new ArgumentException("Group class in SpaceClaim is not derived from Modeler.Topology");
+                default:
+                    return null;
+            }
+        }
+
+        private Dictionary<RefBody, DesignBody> BodyToDesignBodyMap = new Dictionary<RefBody, DesignBody>();
+
+        /// <summary>
+        /// In SpaceClaim Tesselation is owned by DesignBody, not by RefBody as in Cubit
+        /// </summary>
+        /// <returns></returns>
+        private DesignBody FromBodyToDesignBody(in Body body)
+        {
+            return BodyToDesignBodyMap[body];
+        }
+        #endregion
+
+        #region UniqueEntityID
         /// <summary>
         /// SpaceClaim only variable, to help generate unique ID for topology entities
         /// it should be used only by generateUniqueId() which must be called in single thread.  
@@ -119,7 +214,7 @@ namespace Dagmc_Toolbox
         private int getUniqueId(in Object o)
         {
             return entity_id_double_map.Forward[o];
-            /* 
+            /* unused code for Dictionary<> only
             if (entity_id_map.ContainKey(o))
             {
                 return entity_id_map[o];
@@ -129,6 +224,7 @@ namespace Dagmc_Toolbox
                 return 0;  // it is not sufficient to indicate no such id,  todo: just throw?
             }*/
         }
+        #endregion
 
 
         public DagmcExporter()
@@ -144,27 +240,35 @@ namespace Dagmc_Toolbox
             myGeomTool = new Moab.GeomTopoTool(myMoabInstance, false, 0, true, true);  //  missing binding has been manually added
         }
 
-        bool CHK_MB_ERR_RET(string A, Moab.ErrorCode B)
+        /// <summary>
+        /// used to check error of return value for each subroutine in Execute() workflow
+        /// corresponding to MOAB `CHK_MB_ERR_RET()` macro function
+        /// SpaceClaim is a GUI app, there is no console output capacity, message is directed to Trace/Debug
+        /// which can be seen in visual studio output windows, 
+        /// it can be directed to log file if needed
+        /// </summary>
+        /// <param name="Msg"> string message to explain the context of error </param>
+        /// <param name="ErrCode"> enum Moab.ErrorCode </param>
+        /// <returns> return true if no error </returns>
+        bool CHK_MB_ERR_RET(string Msg, Moab.ErrorCode ErrCode)
         {
-            if (Moab.ErrorCode.MB_SUCCESS != (B))
+            if (Moab.ErrorCode.MB_SUCCESS != (ErrCode))
             {
-                message.WriteLine("{0}, {1}", A, B);
+                message.WriteLine("{0}, {1}", Msg, ErrCode);
                 //CubitInterface::get_cubit_message_handler()->print_message(message.str().c_str()); 
                 return false;
             }
             return true;
         }
 
-        void CHK_MB_ERR_RET_MB(string A, Moab.ErrorCode B)
-        {
-            if (Moab.ErrorCode.MB_SUCCESS != (B))
-            {
-                message.WriteLine("{0}, {1}", A, B);  /// may just use Debug.WriteLine() as Windows Desktop App has no Console
-                //return B;
-            }
-        }
-
-        void CHK_MB_ERR_RET_DEBUG(string A, Moab.ErrorCode B)
+        /// <summary>
+        /// Non-critical error, print to debug console, corresponding to MOAB `CHK_MB_ERR_RET_MB()` macro function
+        /// SpaceClaim is a GUI app, there is no console output capacity, message is directed to Trace/Debug
+        /// which can be seen in visual studio output windows, it can be directed to log file if needed
+        /// </summary>
+        /// <param name="Msg"> string message to explain the context of error </param>
+        /// <param name="ErrCode"> enum Moab.ErrorCode </param>
+        static void PrintMoabErrorToDebug(string A, Moab.ErrorCode B)
         {
 #if DEBUG
             if (Moab.ErrorCode.MB_SUCCESS != (B))
@@ -174,6 +278,10 @@ namespace Dagmc_Toolbox
 #endif
         }
 
+        /// <summary>
+        /// The DAGMC mesh export workflow, the only public API for user to run
+        /// </summary>
+        /// <returns> return true if sucessful </returns>
         public bool Execute()
         {
 
@@ -252,6 +360,10 @@ namespace Dagmc_Toolbox
             return result;
         }
 
+        /// <summary>
+        /// NOTE:  completed for MVP stage, but need a GUI form for user to customize the parameters in the next stage
+        /// </summary>
+        /// <returns></returns>
         Dictionary<string, object> get_options()
         {
             var options = new Dictionary<string, object>();
@@ -264,6 +376,13 @@ namespace Dagmc_Toolbox
             return options;
         }
 
+
+        /// <summary>
+        /// NOTE: completed for this MVP stage, if no more new parameter added
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="file_set"></param>
+        /// <returns></returns>
         Moab.ErrorCode parse_options(Dictionary<string, object> data, ref EntityHandle file_set)
         {
             Moab.ErrorCode rval;
@@ -279,14 +398,14 @@ namespace Dagmc_Toolbox
             // If file_set is defined, use that, otherwise (file_set == NULL) tag the interface  
             EntityHandle set = file_set != 0 ? file_set : 0;
             rval = myMoabInstance.SetTagData(faceting_tol_tag, ref set, faceting_tol);
-            CHK_MB_ERR_RET_MB("Error setting faceting tolerance tag", rval);
+            PrintMoabErrorToDebug("Error setting faceting tolerance tag", rval);
 
             // read parsed command for normal tolerance
             norm_tol = (int) data["normal_tolerance"];
             message.WriteLine("Setting normal tolerance to {}", norm_tol);
 
             rval = myMoabInstance.SetTagData(geometry_resabs_tag, ref set, GEOMETRY_RESABS);
-            CHK_MB_ERR_RET_MB("Error setting geometry_resabs_tag", rval);
+            PrintMoabErrorToDebug("Error setting geometry_resabs_tag", rval);
 
             // read parsed command for verbosity
             verbose_warnings = (bool)data["verbose"];
@@ -300,6 +419,10 @@ namespace Dagmc_Toolbox
         }
 
 
+        /// <summary>
+        /// NOTE: completed for this MVP stage, if no more new parameter added
+        /// </summary>
+        /// <returns></returns>
         Moab.ErrorCode create_tags()
         {
             Moab.ErrorCode rval;
@@ -312,32 +435,36 @@ namespace Dagmc_Toolbox
             ///  uint must be cast from enum in C#,  void* is mapped to IntPtr type in C#
             rval = myMoabInstance.GetTagHandle<int>(GEOM_DIMENSION_TAG_NAME, 1, Moab.DataType.MB_TYPE_INTEGER,
                                            out geom_tag, Moab.TagType.MB_TAG_SPARSE | Moab.TagType.MB_TAG_ANY, negone);
-            CHK_MB_ERR_RET_MB("Error creating geom_tag", rval); 
+            PrintMoabErrorToDebug("Error creating geom_tag", rval); 
 
             rval = myMoabInstance.GetTagHandle<int>(GLOBAL_ID_TAG_NAME, 1, Moab.DataType.MB_TYPE_INTEGER,
                                            out id_tag, Moab.TagType.MB_TAG_DENSE | Moab.TagType.MB_TAG_ANY, zero);
-            CHK_MB_ERR_RET_MB("Error creating id_tag", rval); 
+            PrintMoabErrorToDebug("Error creating id_tag", rval); 
 
             rval = myMoabInstance.GetTagHandle(NAME_TAG_NAME, NAME_TAG_SIZE, Moab.DataType.MB_TYPE_OPAQUE,
                                            out name_tag, Moab.TagType.MB_TAG_SPARSE | Moab.TagType.MB_TAG_ANY);
-            CHK_MB_ERR_RET_MB("Error creating name_tag", rval);
+            PrintMoabErrorToDebug("Error creating name_tag", rval);
 
             rval = myMoabInstance.GetTagHandle(CATEGORY_TAG_NAME, CATEGORY_TAG_SIZE, Moab.DataType.MB_TYPE_OPAQUE,
                                            out category_tag, Moab.TagType.MB_TAG_SPARSE | Moab.TagType.MB_TAG_CREAT);
-            CHK_MB_ERR_RET_MB("Error creating category_tag", rval);
+            PrintMoabErrorToDebug("Error creating category_tag", rval);
 
             rval = myMoabInstance.GetTagHandle("FACETING_TOL", 1, Moab.DataType.MB_TYPE_DOUBLE, out faceting_tol_tag,
                                            Moab.TagType.MB_TAG_SPARSE | Moab.TagType.MB_TAG_CREAT);
-            CHK_MB_ERR_RET_MB("Error creating faceting_tol_tag", rval);
+            PrintMoabErrorToDebug("Error creating faceting_tol_tag", rval);
 
             rval = myMoabInstance.GetTagHandle("GEOMETRY_RESABS", 1, Moab.DataType.MB_TYPE_DOUBLE,
                                            out geometry_resabs_tag, Moab.TagType.MB_TAG_SPARSE | Moab.TagType.MB_TAG_CREAT);
-            CHK_MB_ERR_RET_MB("Error creating geometry_resabs_tag", rval);
+            PrintMoabErrorToDebug("Error creating geometry_resabs_tag", rval);
 
             return rval;
         }
 
-        /// this function should split
+        /// <summary>
+        /// NOTE: completed for this MVP stage, if no more new parameter added
+        /// consider split this function
+        /// </summary>
+        /// <returns></returns>
         Moab.ErrorCode teardown()
         {
             message.WriteLine("***** Faceting Summary Information *****");
@@ -368,31 +495,19 @@ namespace Dagmc_Toolbox
 
             // todo: MOABSharp, DeleteMesh() should be a method, not property!
             Moab.ErrorCode rval = myMoabInstance.DeleteMesh;   
-            CHK_MB_ERR_RET_MB("Error cleaning up mesh instance.", rval);
+            PrintMoabErrorToDebug("Error cleaning up mesh instance.", rval);
             //delete myGeomTool;  not needed
 
             return rval;
 
         }
 
-        /// <summary>
-        /// assuming all topology objects are within the ActivePart in the ActiveDocument
-        /// </summary>
-        /// <returns></returns>
-        object[] generate_topoloyg_map()
-        {
-            Part part = Helper.GetActiveMainPart();  // todo: can a document have multiple Parts?
-            List<RefBody> bodies = Helper.GatherAllEntities<DesignBody>(part);  // .ConvertAll<RefBody>(o => o.Shape)
-            List<RefFace> surfaces = Helper.GatherAllEntities<DesignFace>(part).ConvertAll<RefFace>(o => o.Shape);
-            List<RefEdge> curves = Helper.GatherAllEntities<DesignEdge>(part).ConvertAll<RefEdge>(o => o.Shape);
-            List<RefVertex> vertices = new List<RefVertex>();  //TODO
-            // Helper.GatherAllEntities<DesignVertex>(part).ConvertAll<RefVertex>(o => o.Shape);
-            List<RefGroup> groups = Helper.GatherAllEntities<RefGroup>(part);
-            object[] entities = { vertices, curves, surfaces, bodies, groups};
-            return entities;
-        }
 
-        // refentity_handle_map (&entmap)[5]
+        /// <summary>
+        /// PROGRESS: 
+        /// </summary>
+        /// <param name="entmap"></param>
+        /// <returns></returns>
         Moab.ErrorCode create_entity_sets(RefEntityHandleMap[] entmap)
         {
             Moab.ErrorCode rval;
@@ -444,50 +559,28 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        /// <summary>
-        ///  List<X> cast to List<Y> will create a new List, not efficient
-        ///  https://stackoverflow.com/questions/5115275/shorter-syntax-for-casting-from-a-listx-to-a-listy
-        ///  Array<X> to Array<Y> ?
+
+        /// <summary> 
+        ///  PROGRESS: NOT completed, not understood, not tested
         /// </summary>
-        /// <param name="ent"></param>
-        /// <param name="entity_type_id"></param>
-        /// <returns></returns>
-        List<RefEntity> get_parent_ref_entities(RefEntity ent, int entity_type_id)
-        {
-            switch(entity_type_id)
-            {
-                case 0:  // replace int with Constant
-                    return ((RefVertex)ent).Edges.Cast<RefEntity>().ToList();
-                case 1:
-                    return ((RefEdge)ent).Faces.Cast<RefEntity>().ToList();
-                case 2:
-                    return new List<RefEntity>() { ((RefFace)ent).Body };  // single parent??? CompSolid?
-                //case 3:
-                //    return ((RefVertex)ent).Edges.Cast<RefEntity>().ToList();
-                default:
-                    return null;
-            }
-        }
-
-
-
-        // refentity_handle_map (&entitymap)[5]
-        /// <summary>
-        ///  SpaceClaim use bottom-up topology reference, different from Cubut's top-down
-        /// </summary>
+        /// <remarks> 
+        /// SpaceClaim 's Group class is not derived from Topology base, 
+        /// so this function is quite different from Trelis plugin's impl
+        /// </remarks>
         /// <param name="entitymaps"></param>
         /// <returns></returns>
         Moab.ErrorCode create_topology(RefEntityHandleMap[] entitymaps)
         {
             Moab.ErrorCode rval;
-            var DIMS = 4;
-            for (int dim = 0; dim < DIMS-1; ++dim)
+            var DIMS = 3;
+            for (int dim = DIMS; dim >1; dim--)
             {
                 var entitymap = entitymaps[dim];
                 foreach (KeyValuePair<RefEntity, EntityHandle> entry in entitymap)
                 {
+                    // SpaceClaim use bottom-up topology reference, different from Cubut/Trelis's top-down
                     // declare new List here, no need for entlist.clean_out(); entlist.reset(); 
-                    List<RefEntity> entitylist = get_parent_ref_entities(entry.Key, dim);
+                    List<RefEntity> entitylist = get_child_ref_entities(entry.Key, dim);
                     foreach (RefEntity ent in entitylist)
                     {
                         EntityHandle h = entitymaps[dim + 1][ent];
@@ -498,10 +591,22 @@ namespace Dagmc_Toolbox
                     }
                 }
             }
+            // todo: extra work needed for CubitGroup topology
+            foreach (var group in entitymaps[GROUP_INDEX])
+            {
+                //var bodies = GetBodiesInGroup(group);
+            }
 
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
+        /// <summary>
+        /// In Cubit from each face it is possible to get both/all bodies that share this face, 
+        /// No spaceclaim API has been confirmed, here use some API to close code flow
+        /// </summary>
+        /// <param name="surface_map"></param>
+        /// <param name="volume_map"></param>
+        /// <returns></returns>
         Moab.ErrorCode store_surface_senses(ref RefEntityHandleMap surface_map, ref RefEntityHandleMap volume_map)
         {
             Moab.ErrorCode rval;
@@ -515,13 +620,41 @@ namespace Dagmc_Toolbox
                 // get senses, for each topology entity in Cubit, connected to more than one upper geometry
                 // IsReverse() ,   but sense only make sense related with Parent Topology Object
                 // Cubut each lower topology types may have more than one upper topology types
-
-                var bodies = get_parent_ref_entities(entry.Key, 1);
-                foreach(Body b in bodies)
+                var bodies = from f in face.AdjacentFaces select f.Body;
+                foreach (Body b in bodies)
                 {
                     ents.Add(volume_map[b]);
-                    senses.Add(face.IsReversed); 
+                    senses.Add(face.IsReversed);
                 }
+
+                /* FIXME:
+                 * BasicTopologyEntity* vol = cf->get_parent_basic_topology_entity_ptr();
+                  // Allocate vol to the proper topology entity (forward or reverse)
+                  if (cf->get_sense() == CUBIT_UNKNOWN ||
+                      cf->get_sense() != face->get_surface_ptr()->bridge_sense()) {
+                    // Check that each surface has a sense for only one volume
+                    if (reverse) {
+                      message << "Surface " << face->id() << " has reverse sense " <<
+                        "with multiple volume " << reverse->id() << " and " <<
+                        "volume " << vol->id() << std::endl;
+                      return moab::MB_FAILURE;
+                    }
+                    reverse = vol;
+                  }
+                  if (cf->get_sense() == CUBIT_UNKNOWN ||
+                      cf->get_sense() == face->get_surface_ptr()->bridge_sense()) {
+                    // Check that each surface has a sense for only one volume
+                    if (forward) {
+                      message << "Surface " << face->id() << " has forward sense " <<
+                        "with multiple volume " << forward->id() << " and " <<
+                        "volume " << vol->id() << std::endl;
+                      return moab::MB_FAILURE;
+                    }
+                    forward = vol;
+                  }
+                */
+
+
                 /*  todo: check 
                 for (int i = 0; i < ents.Count; i++)
                 {
@@ -529,6 +662,7 @@ namespace Dagmc_Toolbox
                 }
                 bool reverse = false;
 
+                // set sense
                 if (! reverse)
                 {
                     rval = myGeomTool->set_sense(ci->second, volume_map[forward], moab::SENSE_FORWARD);
@@ -542,57 +676,15 @@ namespace Dagmc_Toolbox
                 */
             }
 
-            /*
-                BasicTopologyEntity* forward = 0, *reverse = 0;
-                for (SenseEntity* cf = face->get_first_sense_entity_ptr();
-                     cf; cf = cf->next_on_bte())
-                {
-                    BasicTopologyEntity* vol = cf->get_parent_basic_topology_entity_ptr();
-                    // Allocate vol to the proper topology entity (forward or reverse)
-                    if (cf->get_sense() == CUBIT_UNKNOWN ||
-                        cf->get_sense() != face->get_surface_ptr()->bridge_sense())
-                    {
-                        // Check that each surface has a sense for only one volume
-                        if (reverse)
-                        {
-                            message.WriteLine("Surface " << face->id() << " has reverse sense " <<
-                              "with multiple volume " << reverse->id() << " and " <<
-                              "volume " << vol->id() ; ;
-                            return Moab.ErrorCode.MB_FAILURE;
-                        }
-                        reverse = vol;
-                    }
-                    if (cf->get_sense() == CUBIT_UNKNOWN ||
-                        cf->get_sense() == face->get_surface_ptr()->bridge_sense())
-                    {
-                        // Check that each surface has a sense for only one volume
-                        if (forward)
-                        {
-                            message.WriteLine("Surface " << face->id() << " has forward sense " <<
-                              "with multiple volume " << forward->id() << " and " <<
-                              "volume " << vol->id() ; ;
-                            return Moab.ErrorCode.MB_FAILURE;
-                        }
-                        forward = vol;
-                    }
-                }
-
-                if (forward)
-                {
-                    rval = myGeomTool->set_sense(ci->second, volume_map[forward], moab::SENSE_FORWARD);
-                    if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-                }
-                if (reverse)
-                {
-                    rval = myGeomTool->set_sense(ci->second, volume_map[reverse], moab::SENSE_REVERSE);
-                    if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-                }
-            }
-            */
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        // 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="curve_map"></param>
+        /// <param name="surface_map"></param>
+        /// <returns></returns>
         Moab.ErrorCode store_curve_senses(ref RefEntityHandleMap curve_map, ref RefEntityHandleMap surface_map)
         {
             Moab.ErrorCode rval;
@@ -603,30 +695,8 @@ namespace Dagmc_Toolbox
                 List<int> senses = new List<int>();
                 RefEdge edge = (RefEdge)entry.Key;
 
-                //TODO: find all parent sense relation edge->get_first_sense_entity_ptr()
-
-                // this MOAB API `SetSenses` is not binded, due to missing support of std::vector<int>
-                //myGeomTool.SetSenses(entry.Value, ents, senses);   
-                // use the less effcient API to set sense for each entity
-                for (int i = 0; i< ents.Count; i++)
-                {
-                    myGeomTool.SetSense(entry.Value, ents[i], senses[i]);
-                }
-  
-            }
-
-            /*   
-            std::vector<moab::EntityHandle> ents;
-            std::vector<int> senses;
-            refentity_handle_map_itor ci;
-            for (ci = curve_map.begin(); ci != curve_map.end(); ++ci)
-            {
-                RefEdge* edge = (RefEdge*)(ci->first);
-                ents.clear();
-                senses.clear();
-                for (SenseEntity* ce = edge->get_first_sense_entity_ptr();
-                     ce; ce = ce->next_on_bte())
-                {
+                //FIXME: find all parent sense relation edge->get_first_sense_entity_ptr()
+                /*
                     BasicTopologyEntity* fac = ce->get_parent_basic_topology_entity_ptr();
                     moab::EntityHandle face = surface_map[fac];
                     if (ce->get_sense() == CUBIT_UNKNOWN ||
@@ -641,14 +711,19 @@ namespace Dagmc_Toolbox
                         ents.push_back(face);
                         senses.push_back(moab::SENSE_FORWARD);
                     }
+                */
+
+                // this MOAB API `myGeomTool.SetSenses(entry.Value, ents, senses); ` is not binded,
+                // due to missing support of std::vector<int>
+                // use the less effcient API to set sense for each entity
+                for (int i = 0; i< ents.Count; i++)
+                {
+                    myGeomTool.SetSense(entry.Value, ents[i], senses[i]);
                 }
-
-                rval = myGeomTool->set_senses(ci->second, ents, senses);
-                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
+  
             }
-            */
 
-            return Moab.ErrorCode.MB_SUCCESS;
+             return Moab.ErrorCode.MB_SUCCESS;
         }
 
 
@@ -668,7 +743,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        ///  todo: group retrieval in SpaceClaim API has not been found
+        /// 
         /// </summary>
         /// <param name="group_map"></param>
         /// <returns></returns>
@@ -708,66 +783,7 @@ namespace Dagmc_Toolbox
                     return Moab.ErrorCode.MB_FAILURE;
 
                 // TODO: missing code: Check for extra group names
-
-                group_map[group] = h;
-            }
-
-
-            /*
-            const char geom_categories[][CATEGORY_TAG_SIZE] =
-              { "Vertex\0", "Curve\0", "Surface\0", "Volume\0", "Group\0"};
-            DLIList<RefEntity*> entitylist;
-
-            // Create entity sets for all ref groups
-            std::vector<moab::Tag> extra_name_tags;
-            DLIList<CubitString> name_list;
-            entitylist.clean_out();
-
-            // Get all entity groups from the CGM model
-            GeometryQueryTool::instance()->ref_entity_list("group", entitylist);
-            entitylist.reset();
-
-            // Loop over all groups
-            for (int i = entitylist.size(); i--;)
-            {
-                // Take the next group
-                RefEntity* grp = entitylist.get_and_step();
-                name_list.clean_out();
-                // Get the names of all entities in this group from the solid model
-                RefEntityName::instance()->get_refentity_name(grp, name_list);
-                if (name_list.size() == 0)
-                    continue;
-                // Set pointer to first name of the group and set the first name to name1
-                name_list.reset();
-                CubitString name1 = name_list.get();
-
-                // Create entity handle for the group
-                EntityHandle h;
-                rval = myMoabInstance.CreateMeshset(MESHSET_SET, ref h);
-                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-
-                // Set tag data for the group
-                char namebuf[NAME_TAG_SIZE];
-                memset(namebuf, '\0', NAME_TAG_SIZE);
-                strncpy(namebuf, name1.c_str(), NAME_TAG_SIZE - 1);
-                if (name1.length() >= (unsigned)NAME_TAG_SIZE)
-                {
-                    message.WriteLine("WARNING: group name '" << name1.c_str()
-                            << "' truncated to '" << namebuf << "'" ; ;
-                }
-                rval = myMoabInstance.SetTagData(name_tag, ref h, 1, namebuf);
-                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
-
-
-                int id = grp->id();
-                rval = myMoabInstance.SetTagData(id_tag, ref h, 1, id);
-                if (Moab.ErrorCode.MB_SUCCESS != rval)
-                    return Moab.ErrorCode.MB_FAILURE;
-
-                rval = myMoabInstance.SetTagData(category_tag, ref h, 1, geom_categories[4]);
-                if (Moab.ErrorCode.MB_SUCCESS != rval)
-                    return Moab.ErrorCode.MB_FAILURE;
-                // Check for extra group names
+                /*
                 if (name_list.size() > 1)
                 {
                     for (int j = extra_name_tags.size(); j < name_list.size(); ++j)
@@ -793,14 +809,18 @@ namespace Dagmc_Toolbox
                         if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
                     }
                 }
+
+                */
+
                 // Add the group handle
-                group_map[grp] = h;
+                group_map[group] = h;
             }
-            */
+
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
         /// <summary>
+        ///  This function will be dramatically diff from Trelis DAGMC Plugin in C++
         ///  Range class is used, need unit test
         /// </summary>
         /// <param name="entitymap"></param>
@@ -816,29 +836,50 @@ namespace Dagmc_Toolbox
                 Moab.Range entities = new Moab.Range();
                 foreach (DocObject obj in gh.Key.Members)  // Cubit: grp->get_child_ref_entities(entlist);
                 {
-                    var body = (DesignBody)obj;
-                    if (null != body) 
+                    // In Cubit, A group can contains another group as child, but it is not possible in SpaceClaim
+                    // so these 2 lines are not needed in SpaceClaim
+                    /*
+                    if (entitymap[4].find(ent) != entitymap[4].end())
                     {
-                        var ent = body.Shape;
-                        // from Body get a list of Volumes, there is no such API/concept in SpaceClaim
+                        // Child is another group; examine its contents
+                        entities.insert(entitymap[4][ent]);
                     }
-                    else if ( null == body)  // not a Body geometry
+                    */
+
+                    if (null != (DesignBody)obj) 
                     {
-                        int dim = 1;  // get dim/type of geometry/topology type, need a helper function
-
-                        //if (! groupMap.ContainsKey(ent))   // this line can not be translated into SpaceClaim
-                        //    entities.Insert(groupMap[ent]);
-
+                        var body = (DesignBody)obj;
                         var ent = body.Shape;
+                        // FIXME: from Body get a list of Volumes, but there is no such API/concept in SpaceClaim
+                        //In SpaceClaim, Body has PieceCount, but it seems not possible to get each piece
                         //  get a list of Volumes from Body:  `DLIList<RefVolume*> vols;  body->ref_volumes(vols);`
-                        // In SpaceClaim, Body has PieceCount, but it seems not possible to get each piece
-                        //foreach(var vol in ent.)
+                        /*
+                         // Child is a CGM Body, which presumably comprises some volumes--
+                         // extract volumes as if they belonged to group.
+                          DLIList<RefVolume*> vols;
+                          body->ref_volumes(vols);
+                          for (int vi = vols.size(); vi--; ) {
+                            RefVolume* vol = vols.get_and_step();
+                            if (entitymap[3].find(vol) != entitymap[3].end()) {
+                              entities.insert(entitymap[3][vol]);
+                            } else {
+                              message << "Warning: CGM Body has orphan RefVolume" << std::endl;
+                            }
+                          }
+                        */
                     }
-                    else
+                    else // not a Body geometry
                     {
-
+                        //int dim = 1;  // get dim/type of geometry/topology type, need a helper function
+                        // FIXME: yet translated code
+                        /*
+                        if (dim < 4)
+                        {
+                            if (entitymap[dim].find(ent) != entitymap[dim].end())
+                                entities.insert(entitymap[dim][ent]);
+                        }
+                        */
                     }
-                    
                 }
                 if (!entities.Empty)
                 {
@@ -847,67 +888,6 @@ namespace Dagmc_Toolbox
                         return rval;
                 }
             }
-
-
-            /*
-            DLIList<RefEntity*> entlist;
-            refentity_handle_map_itor ci;
-            // Store contents for each group
-            entlist.reset();
-            for (ci = entitymap[4].begin(); ci != entitymap[4].end(); ++ci)
-            {
-                RefGroup* grp = (RefGroup*)(ci->first);
-                entlist.clean_out();
-                grp->get_child_ref_entities(entlist);
-
-                moab::Range entities;
-                while (entlist.size())
-                {
-                    RefEntity* ent = entlist.pop();
-                    int dim = ent->dimension();
-
-                    if (dim < 0)
-                    {
-                        Body* body;
-                        if (entitymap[4].find(ent) != entitymap[4].end())
-                        {
-                            // Child is another group; examine its contents
-                            entities.insert(entitymap[4][ent]);
-                        }
-                        else if ((body = dynamic_cast<Body*>(ent)) != NULL)
-                        {
-                            // Child is a CGM Body, which presumably comprises some volumes--
-                            // extract volumes as if they belonged to group.
-                            DLIList<RefVolume*> vols;
-                            body->ref_volumes(vols);
-                            for (int vi = vols.size(); vi--;)
-                            {
-                                RefVolume* vol = vols.get_and_step();
-                                if (entitymap[3].find(vol) != entitymap[3].end())
-                                {
-                                    entities.insert(entitymap[3][vol]);
-                                }
-                                else
-                                {
-                                    message.WriteLine("Warning: CGM Body has orphan RefVolume" ; ;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // Otherwise, warn user.
-                            message.WriteLine("Warning: A dim<0 entity is being ignored by ReadCGM." ; ;
-                        }
-                    }
-                    else if (dim < 4)
-                    {
-                        if (entitymap[dim].find(ent) != entitymap[dim].end())
-                            entities.insert(entitymap[dim][ent]);
-                    }
-                }
-
-
-                    */
 
             return Moab.ErrorCode.MB_SUCCESS;
         }
@@ -942,7 +922,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        ///  should be merged into create_surface_facets for performance.
+        ///  code has been merged into create_surface_facets() for performance.
         /// </summary>
         /// <param name="curve_map"></param>
         /// <param name="vertex_map"></param>
@@ -955,11 +935,12 @@ namespace Dagmc_Toolbox
             List<RefBody> allBodies = (List<RefBody>)TopologyEntities[VOLUME_INDEX];
             foreach (var body in allBodies)
             {
+                var designBoby = FromBodyToDesignBody(body);
                 Moab.Range entities = new Moab.Range();
                 //var designBody = body.
-                foreach (var kv in body.GetEdgeTessellation(body.Shape.Edges))
+                foreach (var kv in designBoby.GetEdgeTessellation(body.Edges))
                 {
-                    // do nothing, as this function body has been moved
+                    // do nothing, as this function body has been moved/merged with `create_surface_facets()`
                 }
             }
 
@@ -1049,7 +1030,7 @@ namespace Dagmc_Toolbox
             // Special case for point curve, closed curve has only 1 point
             if (points.Count < 2)
             {
-                EntityHandle h = vertex_map[start_vtx];  // why, 
+                EntityHandle h = vertex_map[start_vtx];  // why ???
                 rval = myMoabInstance.AddEntities(edgeHandle, ref h, 1);
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return Moab.ErrorCode.MB_FAILURE;
@@ -1184,20 +1165,19 @@ namespace Dagmc_Toolbox
             foreach (var body in allBodies)
             {
                 Moab.Range facet_entities = new Moab.Range();
-
-                /// may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
-                foreach (var kv in body.GetEdgeTessellation(body.Shape.Edges))
+                DesignBody designBody = FromBodyToDesignBody(body);
+                /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
+                foreach (var kv in designBody.GetEdgeTessellation(body.Edges))
                 {
                     add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
                 }
-
-                foreach (var kv in body.Shape.GetTessellation(body.Shape.Faces, meshOptions))
+                /// todo:  here new tesselaton may be created. 
+                foreach (var kv in body.GetTessellation(body.Faces, meshOptions))
                 {
                     var face = kv.Key;
                     EntityHandle faceHandle = surface_map[face];
                     FaceTessellation t = kv.Value;
                     add_surface_mesh(face, t, faceHandle, ref vertex_map);
-
                 }
             }
 
@@ -1209,20 +1189,20 @@ namespace Dagmc_Toolbox
             Moab.ErrorCode rval;
             Moab.Range new_ents = new Moab.Range();
             rval = myMoabInstance.GetEntitiesByHandle(0, new_ents, false);  // the last parameter has a default value false
-            CHK_MB_ERR_RET_MB("Could not get all entity handles.", rval);
+            PrintMoabErrorToDebug("Could not get all entity handles.", rval);
 
             //make sure there the gather set is empty
             Moab.Range gather_ents = new Moab.Range();
             rval = myMoabInstance.GetEntitiesByHandle(gather_set, gather_ents, false);  // 
-            CHK_MB_ERR_RET_MB("Could not get the gather set entities.", rval);
+            PrintMoabErrorToDebug("Could not get the gather set entities.", rval);
 
             if (0 != gather_ents.Size)
             {
-                CHK_MB_ERR_RET_MB("Unknown entities found in the gather set.", rval);
+                PrintMoabErrorToDebug("Unknown entities found in the gather set.", rval);
             }
 
             rval = myMoabInstance.AddEntities(gather_set, new_ents);
-            CHK_MB_ERR_RET_MB("Could not add newly created entities to the gather set.", rval);
+            PrintMoabErrorToDebug("Could not add newly created entities to the gather set.", rval);
 
             return rval;
         }

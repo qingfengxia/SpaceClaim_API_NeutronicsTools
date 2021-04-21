@@ -26,9 +26,9 @@ using EntityHandle = System.UInt64;   // type alias is only valid in the source 
 
 /// type alias to help Cubit/Trelis developers to understand SpaceClaim API
 ///using RefEntity = SpaceClaim.Api.V19.Geometry.IShape;
-using RefGroup = SpaceClaim.Api.V19.Group;   /// SpaceClaim.Api.V19.Group;
+using RefGroup = SpaceClaim.Api.V19.Group;   /// Group is not derived from Modeler.Topology
 using RefEntity = SpaceClaim.Api.V19.Modeler.Topology;
-// RefVolume ?
+// RefVolume has no mapping in SpaceClaim
 using RefBody = SpaceClaim.Api.V19.DesignBody;
 using RefFace = SpaceClaim.Api.V19.Modeler.Face;
 using RefEdge = SpaceClaim.Api.V19.Modeler.Edge;
@@ -85,48 +85,53 @@ namespace Dagmc_Toolbox
 
         // todo  attach file log to Debug/Trace to get more info from GUI
         static readonly EntityHandle UNINITIALIZED_HANDLE = 0;
-        internal class EntitityTopology
-        {
-            public List<RefVertex> Vertices;
-            public List<RefEdge> Edges;
-            public List<RefFace> Faces;
-            public List<RefBody> Bodies;
-            public List<RefGroup> Groups;
-
-            public EntitityTopology(List<RefVertex> v, List<RefEdge> e, List<RefFace> f, List<RefBody> b, List<RefGroup> g)
-            {
-                Vertices = v;
-                Edges = e;
-                Faces = f;
-                Bodies = b;
-                Groups = g;
-            }
-            public object GetEnties(int index)
-            {
-                switch (index)
-                {
-                    case 1:
-                        // return Edges.Cast<RefEntity>().ToList();  /// this create a new object, not efficient
-                        return Edges;
-                    default:
-                        return null;
-
-                }
-            }
-            public object this[int index]
-            {
-                // get and set accessors
-                get => GetEnties(index);
-            }
-        }
-
 
         /// <summary>
         /// in C++, all these Tag, typedef of TagInfo*, initialized to zero (nullptr)
         /// </summary>
         Moab.Tag geom_tag, id_tag, name_tag, category_tag, faceting_tol_tag, geometry_resabs_tag;
 
-        DagmcExporter()
+        /// <summary>
+        /// SpaceClaim only variable, to help generate unique ID for topology entities
+        /// it should be used only by generateUniqueId() which must be called in single thread.  
+        /// </summary>
+        private int entity_id_counter = 0;
+        /// <summary>
+        ///  todo: check and test whether (testing object has been generated id in later stage) is working
+        ///  note: `List[key] + Dictionary[key, value]` could be more efficient than DoubleMap
+        ///         Dictionary[key, value] may be sufficient, if only object to id mapping is needed.
+        /// </summary>
+        private Map<Object, int> entity_id_double_map = new Map<Object, int>();
+
+        /// <summary>
+        /// generate unique ID for topology entities, the first id is 1
+        /// corresponding to `int id = ent->id();` in Trelis_SDK
+        /// </summary>
+        /// <param name="o"> object must be Group or Topology types </param>
+        /// <returns> an integer unique ID</returns>
+        private int generateUniqueId(in Object o)
+        {
+            entity_id_counter++;  // increase before return, to make sure the first id is 1
+            entity_id_double_map.Add(o, entity_id_counter); // in order to retrieve id later
+            return entity_id_counter;
+        }
+
+        private int getUniqueId(in Object o)
+        {
+            return entity_id_double_map.Forward[o];
+            /* 
+            if (entity_id_map.ContainKey(o))
+            {
+                return entity_id_map[o];
+            }
+            else
+            {
+                return 0;  // it is not sufficient to indicate no such id,  todo: just throw?
+            }*/
+        }
+
+
+        public DagmcExporter()
         {
             // set default values
             norm_tol = 5;
@@ -169,7 +174,7 @@ namespace Dagmc_Toolbox
 #endif
         }
 
-        bool Execute()
+        public bool Execute()
         {
 
             //Moab.Core myMoabInstance = myMoabInstance;
@@ -356,11 +361,13 @@ namespace Dagmc_Toolbox
             }
             message.WriteLine("***** End of Faceting Summary Information *****");
 
+            // this code section is not needed in spaceclaim
             //CubitInterface::get_cubit_message_handler()->print_message(message.str().c_str());  
-            // TODO this print_message() should have a function to hide impl
-            //message.str("");  // not needed
+            // TODO in C++ this print_message() should have a function to hide impl
+            //message.str("");  
 
-            Moab.ErrorCode rval = myMoabInstance.DeleteMesh;   // todo MOABSharp, it is a method, not property!
+            // todo: MOABSharp, DeleteMesh() should be a method, not property!
+            Moab.ErrorCode rval = myMoabInstance.DeleteMesh;   
             CHK_MB_ERR_RET_MB("Error cleaning up mesh instance.", rval);
             //delete myGeomTool;  not needed
 
@@ -368,6 +375,10 @@ namespace Dagmc_Toolbox
 
         }
 
+        /// <summary>
+        /// assuming all topology objects are within the ActivePart in the ActiveDocument
+        /// </summary>
+        /// <returns></returns>
         object[] generate_topoloyg_map()
         {
             Part part = Helper.GetActiveMainPart();  // todo: can a document have multiple Parts?
@@ -420,9 +431,7 @@ namespace Dagmc_Toolbox
                     rval = myMoabInstance.SetTagData(geom_tag, ref handle, dim);
                     if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
 
-                    /// TODO: sequence number or just hashID? SpaceClaim may does not have, how about moniker?
-                    //int id = ent->id();  // returned ID not the `class id` defiend in Trelis_SDK
-                    int id = ent.GetHashCode();
+                    int id = generateUniqueId(ent);
 
                     /// CONSIDER: set more tags' data in one go by Range, which is more efficient in C#
                     rval = myMoabInstance.SetTagData(id_tag, ref handle, id);
@@ -447,7 +456,7 @@ namespace Dagmc_Toolbox
         {
             switch(entity_type_id)
             {
-                case 0:
+                case 0:  // replace int with Constant
                     return ((RefVertex)ent).Edges.Cast<RefEntity>().ToList();
                 case 1:
                     return ((RefEdge)ent).Faces.Cast<RefEntity>().ToList();
@@ -596,8 +605,9 @@ namespace Dagmc_Toolbox
 
                 //TODO: find all parent sense relation edge->get_first_sense_entity_ptr()
 
-                // this MOAB API `SetSenses` is not binded, due to missing support of std::vector<int>, use the less effcient API
+                // this MOAB API `SetSenses` is not binded, due to missing support of std::vector<int>
                 //myGeomTool.SetSenses(entry.Value, ents, senses);   
+                // use the less effcient API to set sense for each entity
                 for (int i = 0; i< ents.Count; i++)
                 {
                     myGeomTool.SetSense(entry.Value, ents[i], senses[i]);
@@ -688,7 +698,7 @@ namespace Dagmc_Toolbox
                     if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
                 }
 
-                int id = group.GetHashCode();   //  todo:  ->id();
+                int id = generateUniqueId(group);
                 rval = myMoabInstance.SetTagData<int>(id_tag, ref h, id);
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return Moab.ErrorCode.MB_FAILURE;
@@ -697,10 +707,11 @@ namespace Dagmc_Toolbox
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return Moab.ErrorCode.MB_FAILURE;
 
-                // TODO:  Check for extra group names
+                // TODO: missing code: Check for extra group names
 
                 group_map[group] = h;
             }
+
 
             /*
             const char geom_categories[][CATEGORY_TAG_SIZE] =
@@ -809,11 +820,11 @@ namespace Dagmc_Toolbox
                     if (null != body) 
                     {
                         var ent = body.Shape;
-                        // from Body get a list of Volumes
+                        // from Body get a list of Volumes, there is no such API/concept in SpaceClaim
                     }
-                    else if ( null == body)
+                    else if ( null == body)  // not a Body geometry
                     {
-                        int dim = 1;  // get dim/type of geometry/topology type
+                        int dim = 1;  // get dim/type of geometry/topology type, need a helper function
 
                         //if (! groupMap.ContainsKey(ent))   // this line can not be translated into SpaceClaim
                         //    entities.Insert(groupMap[ent]);
@@ -960,17 +971,17 @@ namespace Dagmc_Toolbox
             var curve = edge.GetGeometry<Curve>();  // the return may be null
             if (points.Count == 0)
             {
-                // if we fatal on curves
+                // check if fatal error found on curves
                 if (fatal_on_curves)
                 {
-                    message.WriteLine("Failed to facet the curve {}", edge.GetHashCode());
+                    message.WriteLine("Failed to facet the curve with id: {}", getUniqueId(edge));
                     return Moab.ErrorCode.MB_FAILURE;
                 }
                 // otherwise record them
                 else
                 {
                     failed_curve_count++;
-                    failed_curves.Add(edge.GetHashCode());
+                    failed_curves.Add(getUniqueId(edge));
                     return Moab.ErrorCode.MB_FAILURE;
                 }
             }
@@ -996,7 +1007,7 @@ namespace Dagmc_Toolbox
             bool closed = (points.Last() - points.First()).Magnitude < GEOMETRY_RESABS;
             if (closed != (start_vtx == end_vtx))
             {
-                message.WriteLine("Warning: topology and geometry inconsistant for possibly closed curve {}", edge.GetHashCode());
+                message.WriteLine("Warning: topology and geometry inconsistant for possibly closed curve id = {}", getUniqueId(edge));
             }
 
             // Check proximity of vertices to end coordinates
@@ -1007,7 +1018,7 @@ namespace Dagmc_Toolbox
                 curve_warnings--;
                 if (curve_warnings >= 0 || verbose_warnings)
                 {
-                    message.WriteLine("Warning: vertices not at ends of curve {}", edge.GetHashCode());
+                    message.WriteLine("Warning: vertices not at ends of curve id = {}", getUniqueId(edge));
                     if (curve_warnings == 0 && !verbose_warnings)
                     {
                         message.WriteLine("further instances of this warning will be suppressed...");
@@ -1096,7 +1107,7 @@ namespace Dagmc_Toolbox
             if (nFacet == 0)
             {
                 failed_surface_count++;
-                failed_surfaces.Add(face.GetHashCode());
+                failed_surfaces.Add(getUniqueId(face));
             }
 
             var hVerts = new EntityHandle[nPoint];  // vertex id in MOAB
@@ -1117,7 +1128,7 @@ namespace Dagmc_Toolbox
                     }
                     else
                     {
-                        message.WriteLine("Warning: Coincident vertices in surface {}, for the point at {}", face.GetHashCode(), pos);
+                        message.WriteLine("Warning: Coincident vertices in surface id = {}, for the point at {}", getUniqueId(face), pos);
                     }
                 }
             }

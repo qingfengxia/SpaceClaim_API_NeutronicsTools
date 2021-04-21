@@ -100,6 +100,8 @@ public :
 class CUBIT_GEOM_EXPORT Body : public GroupingEntity,  public RefEntity
 ```
 
+`ITrimmedSpace` in SpaceClaim   hasArea hasVolume
+
 ### No one-by-one corresponding API
 + SpaceClaim Curve meshing
 `DesignBody has GetEdgeTEssellation` while Cubut edge has EdgeTEssellation
@@ -146,28 +148,57 @@ MeshTopology
 
 ## Todo
 ### ID in Cubit  mapped to what kind of ID in SpaceClaim?
-face->id()  id is a hash function? this ID may change if face is modified.
+`face->id()`  returns a integer id (a hash function?) this ID may change if face is modified.
 
-Currently, `Object.GetHashCode()` in C# is used.
+Currently, `Object.GetHashCode()` in C# is used, but it may be not unique!!! see MSDN doc
+> The default implementation of the GetHashCode method does not guarantee unique return values for different objects. 
+https://stackoverflow.com/questions/7458139/net-is-type-gethashcode-guaranteed-to-be-unique
+https://docs.microsoft.com/en-us/dotnet/api/system.object.gethashcode?redirectedfrom=MSDN&view=net-5.0#System_Object_GetHashCode
 
-### Mesh on Shared face may has been writen twice
+SpaceClaim API  `Face.Moniker<>` maybe used, but `Moniker<>`  does not have an integer id property.
+
+`BasicMoniker` has `Id` property of `PersistentId` type, 
+`PersistentId` is a value type, has the integer ID.
+`ObjectId`  has `Version`
+
+If goemetry is imported from other CAD software, there may be an `@id` attribute for body
+
+### Imprint
+
+Select all bodies and imprint, it is a command with several iteration
+Body has a method `public void Imprint(	Body other )`
+
+`Accuracy.EqualVolumes(double v1, double v2)`
+Compares two volume values to see if they are equal within a predefined tolerance based on `LinearResolution`.
+
+
+### Mesh on Shared face may has been written twice
 
 needs to find a way to detect shared interior face, then save triangle once mesh.
 
 vertex hash may need. 
 
-FaceTesselation may not generate for shared face between bodies,    non-manifold
+FaceTessellation may not generate for shared face between bodies,    non-manifold
 
 ### Curve and Face sense/side-ness, etc 
 
-No API has been found for Face and Curve.
+`Face.Reversed() -> bool` is the API to check face sense,   
+
+>  Trimmed curves and trimmed surfaces also have an IsReversed property, which tells you whether the sense of the object is the opposite of the sense of its geometry. The sense of a trimmed curve is its direction, and the sense of a trimmed surface is which way its normals face.
+>
+> excerpt from "SpaceClaim developer Guide"
 
 
 ### Unit test
 
 spaceclaim may run IronPython file in batch mode?
 
-### Weekly project update 
 
-before the Kanban board ready, excel to update
-https://ukaeauk.sharepoint.com/:x:/r/sites/STEP_DigitalEnablers_B2_2_1/_layouts/15/doc2.aspx?sourcedoc=%7B3006A85A-4554-4518-9255-4238FDA414F9%7D&file=Weekly%20Standup.xlsx&action=default&mobileredirect=true&cid=dbc507af-f7b4-4d2c-95a1-a18a0c1fd37b
+
+### find out the output of `Debug.WriteLine() `
+
+https://stackoverflow.com/questions/1159755/where-does-system-diagnostics-debug-write-output-appear
+
+> While debugging `System.Diagnostics.Debug.WriteLine` will display in the output window (Ctrl+Alt+O), you can also add a `TraceListener` to the `Debug.Listeners` collection to specify `Debug.WriteLine` calls to output in other locations.
+
+>  Note: `Debug.WriteLine` calls may not display in the output window if you have the Visual Studio option "Redirect all Output Window text to the Immediate Window" checked under the menu *Tools* → *Options* → *Debugging* → *General*. To display "*Tools* → *Options* → *Debugging*", check the box next to "*Tools* → *Options* → *Show All Settings*".

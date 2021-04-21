@@ -18,12 +18,6 @@ import itertools
     # ITrimmedSpace has Volume propety
     # public static Point GetCenterOfMass(	ISelection selection )
 
-Body has a method `public void Imprint(	Body other )`
-
-ITrimmedSpace   hasArea hasVolume
-`Accuracy.EqualVolumes(double v1, double v2)`
-Compares two volume values to see if they are equal within a predefined tolerance based on `LinearResolution`.
-
 """
 
 # why path is not working, must be in the same folder
@@ -37,6 +31,8 @@ else:
     if os.path.exists(script_dir + os.path.sep + "System.Half.dll"):
         sys.path.append( script_dir + os.path.sep + "System.Half.dll")
         print("find and load System.Half.dll in this folder: ", os.path.abspath(script_dir))
+    else:
+        print("Error, can not load System.Half.dll relative to the script __file__: ", __file__)  
 
 clr.AddReference("System.Half")
 

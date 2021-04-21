@@ -22,8 +22,7 @@ namespace Dagmc_Toolbox.Commands
     {
         // This command name must match that in the Ribbon.xml file
         //----------------------------------------------------------
-        public bool first = true;
-        public string ScriptRelPath = @"PythonScripts\PrintUid.scscript";
+        public string ScriptRelPath = @"PythonScripts\PrintUid.py";
         public const string CommandName = "Dagmc_Toolbox.C#.V18.PrintUid";
 
         public PrintUid() : base(CommandName, Resources.PrintUidText, Resources.PrintUid, Resources.PrintUidHint)
@@ -50,7 +49,7 @@ namespace Dagmc_Toolbox.Commands
 
                 // Run the script
                 SpaceClaim.Api.V19.Application.RunScript(scriptPath, scriptParams);
-                MessageBox.Show($"INFO: Script file {scriptPath} called successfully");
+                //MessageBox.Show($"INFO: Script file {scriptPath} called successfully");
             }
             else
             {

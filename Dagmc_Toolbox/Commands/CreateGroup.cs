@@ -50,12 +50,16 @@ namespace Dagmc_Toolbox.Commands
                 if (form.GType == GroupType.Material) // here filter is assumed to be body only
                 {
                     var selected = Helper.GatherSelectedObjects<DesignBody>(Window.ActiveWindow.ActiveContext);
-                    objects = (ICollection<IDocObject>)selected;  // .Select(o => (DocObject)o)
+                    objects = new List<IDocObject>();
+                    foreach(var o in selected)
+                        objects.Add((DocObject)o);
                 }
-                else if (form.GType == GroupType.Material)
+                else if (form.GType == GroupType.Boundary)
                 {
                     var selected = Helper.GatherSelectedObjects<DesignFace>(Window.ActiveWindow.ActiveContext);
-                    objects = (ICollection<IDocObject>)selected;
+                    objects = new List<IDocObject>();
+                    foreach (var o in selected)
+                        objects.Add((DocObject)o);
                 }
                 else
                 {

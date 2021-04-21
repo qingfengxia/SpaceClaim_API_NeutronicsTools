@@ -79,6 +79,7 @@
     <Compile Include="Commands\CheckGeometry.cs" />
     <Compile Include="Commands\CreateGroup.cs" />
     <Compile Include="Commands\DagmcExportor.cs" />
+    <Compile Include="Commands\DoubleMap.cs" />
     <Compile Include="Commands\PrintUid.cs" />
     <Compile Include="Dagmc_Toolbox.Helper.cs" />
     <Compile Include="Dagmc_Toolbox.Types.cs" />
@@ -107,6 +108,12 @@
     <Content Include="Dagmc_Toolbox_Manifest.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="PythonScripts\PrintUid.py">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="PythonScripts\uniqueid.py">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Include="Resources\CheckGeometry.png" />
     <None Include="Resources\CreateGroup.png" />
     <None Include="Resources\PrintUid.png" />
@@ -114,9 +121,6 @@
     <None Include="packages.config" />
     <None Include="README.md" />
     <!--     -->
-    <None Include="PythonScripts\PrintUid.scscript">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="app.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>

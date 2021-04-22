@@ -97,7 +97,7 @@ namespace Dagmc_Toolbox
         const int CURVE_INDEX = 1;
         const int SURFACE_INDEX = 2;
         const int VOLUME_INDEX = 3;
-        const int GROUP_INDEX = 4;
+        //const int GROUP_INDEX = 4;
         /// <summary>
         /// Group and other topology types do not derived from the same RefEntity base class! but System.Object
         /// consider:  split out Group, then user type-safer `List<RefEntity>[] TopologyEntities;  `
@@ -135,12 +135,20 @@ namespace Dagmc_Toolbox
             TopologyEntities = new List<RefEntity>[] { vertices, edges, surfaces, bodies};
 
         }
-
+        /* Remoting.RemotingException: Object has been disconnected or does not exist at the server
+         * */
         List<RefEntity> GetEdgeVertices(in RefEdge edge)
         {
             List<RefEntity> v = new List<RefEntity>();
-            v.Add(edge.StartVertex);
-            v.Add(edge.EndVertex);  // fixme: some edge has only one Vertex!
+            try
+            {
+                v.Add(edge.StartVertex);  // excpetion here: why?
+                v.Add(edge.EndVertex);  // fixme: some edge has only one Vertex!
+            }
+            catch(System.Runtime.Remoting.RemotingException e)
+            {
+                Debug.WriteLine(e.ToString());
+            }
             return v;
         }
 
@@ -186,9 +194,12 @@ namespace Dagmc_Toolbox
         /// In SpaceClaim Tesselation is owned by DesignBody, not by RefBody as in Cubit
         /// </summary>
         /// <returns></returns>
-        private DesignBody FromBodyToDesignBody(in Body body)
+        private DesignBody FromBodyToDesignBody(in RefBody body)
         {
-            return BodyToDesignBodyMap[body];
+            if (BodyToDesignBodyMap.ContainsKey(body))
+                return BodyToDesignBodyMap[body];
+            else
+                return null;
         }
         #endregion
 
@@ -249,16 +260,18 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        /// used to check error of return value for each subroutine in Execute() workflow
+        /// check return error code for each subroutine in Execute() workflow, 
         /// corresponding to MOAB `CHK_MB_ERR_RET()` macro function
-        /// SpaceClaim is a GUI app, there is no console output capacity, message is directed to Trace/Debug
+        /// </summary>
+        /// <remarks>
+        /// SpaceClaim is a GUI app, there is no console output capacity, message is written to Trace/Debug
         /// which can be seen in visual studio output windows, 
         /// it can be directed to log file if needed
-        /// </summary>
+        /// </remarks>
         /// <param name="Msg"> string message to explain the context of error </param>
         /// <param name="ErrCode"> enum Moab.ErrorCode </param>
         /// <returns> return true if no error </returns>
-        bool CHK_MB_ERR_RET(string Msg, Moab.ErrorCode ErrCode)
+        bool CheckMoabErrorCode(string Msg, Moab.ErrorCode ErrCode)
         {
             if (Moab.ErrorCode.MB_SUCCESS != (ErrCode))
             {
@@ -266,7 +279,14 @@ namespace Dagmc_Toolbox
                 //CubitInterface::get_cubit_message_handler()->print_message(message.str().c_str()); 
                 return false;
             }
-            return true;
+            else
+            {
+#if DEBUG
+                Debug.WriteLine(String.Format("Sucessful: without {0}", Msg));
+#endif
+                return true;
+            }
+            
         }
 
         /// <summary>
@@ -309,64 +329,64 @@ namespace Dagmc_Toolbox
             GroupHandleMap groupMap = new GroupHandleMap(); 
 
             rval = create_tags();
-            CHK_MB_ERR_RET("Error initializing DAGMC export: ", rval);
+            CheckMoabErrorCode("Error initializing DAGMC export: ", rval);
 
             // create a file set for storage of tolerance values
             EntityHandle file_set = 0;  // will zero value means invalid/uninitialized handle?
             rval = myMoabInstance.CreateMeshset(0, ref file_set, 0);  // the third parameter, `start_id` default value is zero
-            CHK_MB_ERR_RET("Error creating file set.", rval);
+            CheckMoabErrorCode("Error creating file set.", rval);
 
             /// options data is from CLI command parse_options in Trelis_Plugin
             /// TODO: needs another way to capture options, may be Windows.Forms UI
             Dictionary<string, object> options = get_options();
 
             rval = parse_options(options, ref file_set);  
-            CHK_MB_ERR_RET("Error parsing options: ", rval);
+            CheckMoabErrorCode("Error parsing options: ", rval);
 
             GenerateTopologyEntities();  // fill data fields: TopologyEntities , GroupEntities
             rval = create_entity_sets(entityMaps);
-            CHK_MB_ERR_RET("Error creating entity sets: ", rval);
+            CheckMoabErrorCode("Error creating entity sets: ", rval);
             //rval = create_group_sets(groupMap);
 
             rval = create_topology(entityMaps);
-            CHK_MB_ERR_RET("Error creating topology: ", rval);
+            CheckMoabErrorCode("Error creating topology: ", rval);
 
             rval = store_surface_senses(ref entityMaps[SURFACE_INDEX], ref entityMaps[VOLUME_INDEX]);
-            CHK_MB_ERR_RET("Error storing surface senses: ", rval);
+            CheckMoabErrorCode("Error storing surface senses: ", rval);
 
             rval = store_curve_senses(ref entityMaps[CURVE_INDEX], ref entityMaps[SURFACE_INDEX]);
-            CHK_MB_ERR_RET("Error storing curve senses: ", rval);
+            CheckMoabErrorCode("Error storing curve senses: ", rval);
 
             rval = store_groups(entityMaps, groupMap);
-            CHK_MB_ERR_RET("Error storing groups: ", rval);
+            CheckMoabErrorCode("Error storing groups: ", rval);
 
-            entityMaps[3].Clear();  // why clear it
-            entityMaps[4].Clear();
+            entityMaps[3].Clear();  // why clear it?
+            groupMap.Clear();
 
-            rval = create_vertices(ref entityMaps[CURVE_INDEX]);
-            CHK_MB_ERR_RET("Error creating vertices: ", rval);
+            rval = create_vertices(ref entityMaps[VERTEX_INDEX]);
+            CheckMoabErrorCode("Error creating vertices: ", rval);
 
             rval = create_curve_facets(ref entityMaps[CURVE_INDEX], ref entityMaps[VERTEX_INDEX]);
-            CHK_MB_ERR_RET("Error faceting curves: ", rval);
+            CheckMoabErrorCode("Error faceting curves: ", rval);
 
             rval = create_surface_facets(ref entityMaps[SURFACE_INDEX], ref entityMaps[CURVE_INDEX], ref entityMaps[VERTEX_INDEX]);
-            CHK_MB_ERR_RET("Error faceting surfaces: ", rval);
+            CheckMoabErrorCode("Error faceting surfaces: ", rval);
 
             rval = gather_ents(file_set);
-            CHK_MB_ERR_RET("Could not gather entities into file set.", rval);
+            CheckMoabErrorCode("Error could not gather entities into file set.", rval);
 
             if (make_watertight)
             {
                 //rval = mw->make_mesh_watertight(file_set, faceting_tol, false);
-                CHK_MB_ERR_RET("Could not make the model watertight.", rval);
+                CheckMoabErrorCode("Could not make the model watertight.", rval);
             }
 
-            EntityHandle h = UNINITIALIZED_HANDLE;  /// to mimic nullptr  for  "EntityHandle*" in C++
-            rval = myMoabInstance.WriteFile(ExportedFileName, null, null, ref h, 0, null, 0);
-            CHK_MB_ERR_RET("Error writing file: ", rval);
+            EntityHandle h = UNINITIALIZED_HANDLE;  /// to mimic "EntityHandle(integer)" in C++
+            rval = myMoabInstance.WriteFile(ExportedFileName);
+            CheckMoabErrorCode("Error writing file: ", rval);
 
             rval = teardown();  // summary
-            CHK_MB_ERR_RET("Error tearing down export command.", rval);
+            CheckMoabErrorCode("Error tearing down export command.", rval);
 
             return result;
         }
@@ -524,15 +544,16 @@ namespace Dagmc_Toolbox
         {
             //GeometryQueryTool::instance()->ref_entity_list(names[dim], entlist, true);  //  Cubit Geom API
             Moab.ErrorCode rval;
-            var DIMS = 3;  // Group set is created in a new function `create_group_sets()`
-            for (int dim = DIMS; dim > 0; dim--)  // collect all bodies then all surfaces
+            // Group set is created in a new function `create_group_sets()`
+            /// FIXME: dim = 0, has error
+            for (int dim = 1; dim < 4; dim++)  // collect all vertices, edges, faces, bodies
             {
                 // declare new List here, no need for entlist.clean_out(); entlist.reset();
                 var entlist = (List<RefEntity>)(TopologyEntities[dim]);  /// FIXME !!! from Object to List<> cast is not working
 
-                message.WriteLine($"Found {entlist.Count} entities of dimension {dim}, geometry type {GEOMETRY_NAMES[dim]}");
+                message.WriteLine($"Debug Info: Found {entlist.Count} entities of dimension {dim}, geometry type {GEOMETRY_NAMES[dim]}");
 
-                rval = _create_entity_sets(entlist, entmap[dim], dim);
+                rval = _create_entity_sets(entlist, ref entmap[dim], dim);
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return rval;  // todo:  print debug info
             }
@@ -546,15 +567,15 @@ namespace Dagmc_Toolbox
         /// <typeparam name="T"></typeparam>
         /// <param name="entlist"></param>
         /// <returns></returns>
-        private Moab.ErrorCode _create_entity_sets<T>(List<T> entlist, Dictionary<T, EntityHandle> entmap, int dim)
+        private Moab.ErrorCode _create_entity_sets<T>(in List<T> entlist, ref Dictionary<T, EntityHandle> entmap, int dim)
         {
             string[] geom_categories = { "Vertex\0", "Curve\0", "Surface\0", "Volume\0", "Group\0" };
-            // todo: fill into byte[][] if needed
+            /// checkme: c++ use byte[][] with "\0" as ending
 
             Moab.ErrorCode rval;
             foreach (var ent in entlist)
             {
-                EntityHandle handle = 0;
+                EntityHandle handle = UNINITIALIZED_HANDLE;
 
                 // Create the new meshset
                 int start_id = 0;
@@ -587,18 +608,18 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        /// not needed!
+        /// not needed! there is a function create_group_entsets()
         /// SpaceClaim specific, to supplement `create_entity_sets()` which can not deal with Group
         /// </summary>
         /// <param name="groupMap"></param>
         /// <returns></returns>
-        Moab.ErrorCode create_group_sets(GroupHandleMap groupMap)
+/*        Moab.ErrorCode create_group_sets(GroupHandleMap groupMap)
         {
             int dim = 4;
             var entlist = GroupEntities;
             Moab.ErrorCode rval = _create_entity_sets(entlist, groupMap, dim);
             return rval;
-        }
+        }*/
 
         /// <summary> 
         /// write parent-children relationship into MOAB
@@ -631,13 +652,13 @@ namespace Dagmc_Toolbox
                         }
                         else  // Fixme
                         {
-                            message.WriteLine("There is logic error, children handle is not found");
+                            message.WriteLine($"There is logic error, children handle is not found for entity dim = {dim}");
                         }
                     }
                 }
             }
             // todo: extra work needed for CubitGroup topology
-            foreach (var group in entitymaps[GROUP_INDEX])
+            foreach (var group in GroupEntities)
             {
                 //var bodies = GetBodiesInGroup(group);
             }
@@ -835,7 +856,7 @@ namespace Dagmc_Toolbox
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return Moab.ErrorCode.MB_FAILURE;
 
-                // TODO: missing code: Check for extra group names
+                // TODO: missing code: Check for extra group names  there may be no such things in SpaceClaim
                 /*
                 if (name_list.size() > 1)
                 {
@@ -873,6 +894,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
+        /// Progress: not completed due to mismatched API
         ///  This function will be dramatically diff from Trelis DAGMC Plugin in C++
         ///  Range class is used, need unit test
         /// </summary>
@@ -945,7 +967,7 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        Moab.ErrorCode add_vertex(in Point pos,  ref EntityHandle h)
+        Moab.ErrorCode _add_vertex(in Point pos,  ref EntityHandle h)
         {
             Moab.ErrorCode rval;
             double[] coords = { pos.X, pos.Y, pos.Z };
@@ -963,7 +985,7 @@ namespace Dagmc_Toolbox
                 EntityHandle h = UNINITIALIZED_HANDLE;
                 RefVertex v = (RefVertex)key;
                 Point pos = v.Position;
-                rval = add_vertex(pos, ref h);
+                rval = _add_vertex(pos, ref h);
                 // Add the vertex to its tagged meshset
                 rval = myMoabInstance.AddEntities(vertex_map[key], ref h, 1);
                 if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
@@ -1092,16 +1114,18 @@ namespace Dagmc_Toolbox
 
             var segs = new List<EntityHandle>();
             var verts = new List<EntityHandle>();
-            verts.Add(vertex_map[start_vtx]);  // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
+            /// FIXME: no such key in map,  skip now
+            //verts.Add(vertex_map[start_vtx]);  // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
             foreach (var point in points)
             {
                 EntityHandle h = UNINITIALIZED_HANDLE;
-                rval = add_vertex(point, ref h);
+                rval = _add_vertex(point, ref h);
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return Moab.ErrorCode.MB_FAILURE;
                 verts.Add(h);
             }
-            verts.Add(vertex_map[end_vtx]); // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
+            /// FIXME: no such key in map,  skip now
+            //verts.Add(vertex_map[end_vtx]); // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
 
             EntityHandle[] meshVerts = verts.ToArray();
             // Create edges, can this be skipped?
@@ -1173,7 +1197,7 @@ namespace Dagmc_Toolbox
                 if (hVerts[i] == UNINITIALIZED_HANDLE) // not found existing vertex in MOAB database
                 {
                     EntityHandle h = UNINITIALIZED_HANDLE;
-                    add_vertex(pointData[i].Position, ref h);
+                    _add_vertex(pointData[i].Position, ref h);
                     //vertex_map[] = h;
                     hVerts[i] = h;
                 }
@@ -1214,26 +1238,36 @@ namespace Dagmc_Toolbox
         {
             Moab.ErrorCode rval;
 
-            TessellationOptions meshOptions = new TessellationOptions();
+            TessellationOptions meshOptions = new TessellationOptions();  
+            // todo: mininum length control
             var allBodies = TopologyEntities[VOLUME_INDEX];
             foreach (var ent in allBodies)
             {
                 var body = (RefBody)ent;
                 Moab.Range facet_entities = new Moab.Range();
-                DesignBody designBody = FromBodyToDesignBody(body);
-                /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
-                foreach (var kv in designBody.GetEdgeTessellation(body.Edges))
+                try
                 {
-                    add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
+                    // FIXME: sometime no error here, sometime RemotingException to get DesignBody
+                    DesignBody designBody = FromBodyToDesignBody(body);
+                    /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
+                    foreach (var kv in designBody.GetEdgeTessellation(body.Edges))
+                    {
+                        add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
+                    }
+                    /// todo:  here new tesselaton may be created. 
+                    foreach (var kv in body.GetTessellation(body.Faces, meshOptions))
+                    {
+                        var face = kv.Key;
+                        EntityHandle faceHandle = surface_map[face];
+                        FaceTessellation t = kv.Value;
+                        add_surface_mesh(face, t, faceHandle, ref vertex_map);
+                    }
                 }
-                /// todo:  here new tesselaton may be created. 
-                foreach (var kv in body.GetTessellation(body.Faces, meshOptions))
+                catch (System.Exception e)
                 {
-                    var face = kv.Key;
-                    EntityHandle faceHandle = surface_map[face];
-                    FaceTessellation t = kv.Value;
-                    add_surface_mesh(face, t, faceHandle, ref vertex_map);
+                    message.WriteLine("Fixme: Body curve edge saving failed" + e.ToString());
                 }
+
             }
 
             return Moab.ErrorCode.MB_SUCCESS;

@@ -117,7 +117,7 @@
     <None Include="Resources\CheckGeometry.png" />
     <None Include="Resources\CreateGroup.png" />
     <None Include="Resources\PrintUid.png" />
-    <None Include="DevNote_Trelis DAGMC plugin porting  to SpaceClaim.md" />
+    <None Include="DevNote_DAGMC_SpaceClaim.md" />
     <None Include="packages.config" />
     <None Include="README.md" />
     <!--     -->

@@ -1,38 +1,55 @@
 # Porting notes
 
-from standard C++ to C++/CLI could be easier,   STL such as `std::cout` and `std::vector<>` can still be used.
 
-It is assume C#6 grammar like `$string` can be used to target .net 4.5 runtime.
+## MVP prerequisites
+It is assumed C#6 grammar like `$string` can be used to target .net 4.5 runtime.
+
+
+Geometry has been check and imprinted before run  this DAGMC_export
+There are project reports on planing and scope.
+No GUI work
+
+### No threading parallelization
+
+It might be that API in Scripting namespace, may can only run in MainThread.
+
 
 ## steps
-1. Source code porting approach: manually  translation
+
+1. Source code porting approach: manually translation, keep function name identical as C++'s
 
 There is some tool to automate this conversion, but not sure about the quality. 
 Given the fact only 1 C++ source file to port, manually translation approach is chosen.
 
-2. STL replaced by .net container and IO types
+From standard C++ to C++/CLI could be easier for C++ code without link to other libraries; STL such as `std::cout` and `std::vector<>` can still be used.
+However, MOAB C++ library depends on HDF5 etc, a safe approach will be writing the binding code to access MOAB.dll ABI.
+
+2. C++ STL replaced by .net container and IO types
 
 3. MOAB C++ APIs replaced by their C# binding APIs
 MOABSharp is the C# binding to MOAB C++ API,  https://bitbucket.org/qingfengxia/moabsharp/
 which serves for this plugin in the first place.
 
-4. Cubit types to SpaceClaim types
+4. Mapping Cubit types to SpaceClaim types, make adaptor functions as required
 
-5. general notes on how to make Trelis_Plugin more portable to other CAD platform
+5. General notes on how to make Trelis_Plugin more portable to other CAD platform
 
 https://github.com/svalinn/Trelis-plugin/issues/88
 
-occ_facetor is a ref for sense, write in C++ for OpenCASCADE
+`occ_facetor` is a reference project for face sense, written in C++ for OpenCASCADE
 
 6. GUI form to capture user options like tolerance
 
+exported file name will be get from file dialog.
 
 
 ## MOABSharp API related
 
-### `entity_map` as functon parameter
+### `&entity_map[]` as functon parameter
 
-This should be a `Dictionary<>` in C#
+This should be a `List<Dictionary<>>` in C#
+
+
 
 ### MOAB C++ typedef to C# alias
 
@@ -74,9 +91,7 @@ if not working, is that possible to add item one by one, instead of by `Range`?
 
 #### Topology types in Cubit/Trelis
 ```c++
-class Body; ACIS lump?
-
-class RefEntity;   all base type for Topology
+class RefEntity;   // all base type for Topology
 class RefGroup;
 class RefVolume;
 class RefFace;
@@ -84,7 +99,12 @@ class RefEdge;
 class RefVertex;
 ```
 
+Cubit's topology is more like OpenCASCADE. 
+Group ->  TopoDS_Compound
+RefVolume -> TopoDS_Solid
+
 Cubit has `Body` class contains `RefVolume`
+Body and RefVolomue in Cubit are different type.
 
 ```c++
 //! RefVolume class.
@@ -98,9 +118,21 @@ public :
 
   //! Body class.
 class CUBIT_GEOM_EXPORT Body : public GroupingEntity,  public RefEntity
+// class Body; ACIS lump?
 ```
 
-`ITrimmedSpace` in SpaceClaim   hasArea hasVolume
+MOAB
+```c#
+  public enum EntityType
+  {
+    VERTEX = 0,
+    EDGE = 1,
+    FACE = 2,
+    REGION = 3,
+    ALL_TYPES = 4,
+  }
+```
+`ITrimmedSpace` in SpaceClaim   hasArea hasVolume, 
 
 ### No one-by-one corresponding API
 + SpaceClaim Curve meshing
@@ -163,9 +195,9 @@ SpaceClaim API  `Face.Moniker<>` maybe used, but `Moniker<>`  does not have an i
 
 If goemetry is imported from other CAD software, there may be an `@id` attribute for body
 
-### Imprint
+### Imprint in batch mode
 
-Select all bodies and imprint, it is a command with several iteration
+Select all bodies and imprint, it is a command with several iterations needs user interaction,
 Body has a method `public void Imprint(	Body other )`
 
 `Accuracy.EqualVolumes(double v1, double v2)`
@@ -188,11 +220,21 @@ FaceTessellation may not generate for shared face between bodies,    non-manifol
 >
 > excerpt from "SpaceClaim developer Guide"
 
+## Debug and Unit test
 
-### Unit test
+### SpaceClaim.exe in batch mode
 
-spaceclaim may run IronPython file in batch mode?
+SpaceClaim.exe has batch mode to run IronPython script, which may be used for unit test.
 
+```
+"C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.exe" /RunScript="your_script_file"  /Headless=True /Splash=False /Welcome=False /ExitAfterScript=True  /UseRunningSpaceClaim
+```
+
+Unit test by this batch mode is yet sorted out!
+
+### Debug with visual studio
+In visual studio, select SpaceClaim.exe as the start up propraom in the  "Debug" page in a project property.
+Start the debug process normally, the debug should stop at breakpoint in the user source code file as user operates 
 
 
 ### find out the output of `Debug.WriteLine() `
@@ -202,3 +244,55 @@ https://stackoverflow.com/questions/1159755/where-does-system-diagnostics-debug-
 > While debugging `System.Diagnostics.Debug.WriteLine` will display in the output window (Ctrl+Alt+O), you can also add a `TraceListener` to the `Debug.Listeners` collection to specify `Debug.WriteLine` calls to output in other locations.
 
 >  Note: `Debug.WriteLine` calls may not display in the output window if you have the Visual Studio option "Redirect all Output Window text to the Immediate Window" checked under the menu *Tools* → *Options* → *Debugging* → *General*. To display "*Tools* → *Options* → *Debugging*", check the box next to "*Tools* → *Options* → *Show All Settings*".
+
+## Deployment Addin
+
+### Dependencies
++ nuget System.Half
+  website
+  > add as a nuget references, it is a prerelease package
+  Used to compute [parallel-preprocessor]() style goemetry hashing ID
+
++ MOABSharp.dll: not packaged yet, together with CppSharp.Runtime.dll
+  website:
+  > This C# project can be added into the visual studio solution, and as a project dependency of Damgc_Toolbox
+  https://docs.microsoft.com/en-us/visualstudio/ide/managing-references-in-a-project?view=vs-2019#:~:text=To%20add%20a%20reference%2C%20right,node%20and%20select%20Add%20%3E%20Reference.
+
+
++ MOAB native DLL built (together with HDF5 DLL)
+  website:
+  > if they are on PATH, should be able to load on developer machine, 
+  copy to output folder by csproj xml file?
+
+#### API.V19 is needed for GeometryCheck
+
+V18 may be used by call a script with GeometryCheck API in IronPython 
+Alternative, use Internal method of V18.
+
+### Deployment notes
+1. SpaceClaim system AddIn folder is not normal user writtable
+`C:\Program Files\ANSYS Inc\v195\scdm\Addins`
+One DLL file such as `AnalysisAddIn.dll` , onw Manifest.xml file, and one `AnalysisAddIn.config` file
+Only sufolders for each language containing research file
+
+4. `C:\ProgramData\SpaceClaim\AddIns\Samples\V18`  
+Why Visual studio can create folder without admin previledge?
+Windows 10 per program virtualization, `C:\ProgramData\SpaceClaim` is a redirection of user folder
+C:\Users\\AppData\Local\VirtualStore\ProgramData\
+
+3. why output Addin is so big, it has included all system dll even like win32.dll
+
+https://docs.microsoft.com/en-us/dotnet/core/deploying/trim-self-contained
+The trim mode for the applications is configured with the TrimMode setting. The default value is copyused and bundles referenced assemblies with the application.
+Trimming is an experimental feature in .NET Core 3.1 and .NET 5.0. Trimming is only available to applications that are published self-contained.
+
+4. CopyLocal property for Reference
+Right click on the Reference itme in **Solution Explorer**, select Property in the dropdown menu.
+In the property pane, check "CopyLocal"
+
+Microsoft.Scripting.dll has been moved into System.Core.dll in dotnet 4
+
+5 supportedRuntime config file
+Three files  `Dagmc_Toolbox.config` is an xml file: 
+`<startup><supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.7.2"/></startup>`
+Manifest.xml use the file name without path, since dll asseblmy file is always in the same folder

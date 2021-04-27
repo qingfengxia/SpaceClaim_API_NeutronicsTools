@@ -250,7 +250,7 @@ namespace Dagmc_Toolbox
         {
             // set default values
             norm_tol = 5;
-            faceting_tol = 1e-3;
+            faceting_tol = 1e-3;  // unit m ? 
             len_tol = 0.0;
             verbose_warnings = false;
             fatal_on_curves = false;
@@ -343,6 +343,7 @@ namespace Dagmc_Toolbox
             rval = parse_options(options, ref file_set);  
             CheckMoabErrorCode("Error parsing options: ", rval);
 
+            // here there may be random error, can not captured by visual studio debugger
             GenerateTopologyEntities();  // fill data fields: TopologyEntities , GroupEntities
             rval = create_entity_sets(entityMaps);
             CheckMoabErrorCode("Error creating entity sets: ", rval);
@@ -383,8 +384,12 @@ namespace Dagmc_Toolbox
 
             EntityHandle h = UNINITIALIZED_HANDLE;  /// to mimic "EntityHandle(integer)" in C++
             rval = myMoabInstance.WriteFile(ExportedFileName);
-            CheckMoabErrorCode("Error writing file: ", rval);
-
+            CheckMoabErrorCode("Error writing h5m mesh file: ", rval);
+            var vtkFileName = ExportedFileName.Replace(".h5m", ".vtk");
+            // give full parameter list, in order to write vtk mesh format
+            rval = myMoabInstance.WriteFile(vtkFileName, null, null, ref h, 0, null, 0);
+            CheckMoabErrorCode("Error writing vtk mesh file: ", rval);
+            
             rval = teardown();  // summary
             CheckMoabErrorCode("Error tearing down export command.", rval);
 
@@ -1232,14 +1237,22 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
+
         /// create_curve_facets() moved here for performance and diff API design in SpaceClaim
         Moab.ErrorCode create_surface_facets(ref RefEntityHandleMap surface_map, ref RefEntityHandleMap edge_map,
                                              ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
 
-            TessellationOptions meshOptions = new TessellationOptions();  
-            // todo: mininum length control
+            /*             SpaceClaim.Api.V19.Modeler.TessellationOptions:
+            The default options are:
+            • SurfaceDeviation = 0.00075 (0.75 mm)
+            • AngleDeviation = 20° (in radians)
+            • MaximumAspectRatio = 0 (unspecified)
+            • MaximumEdgeLength = 0 (unspecified)
+            */
+            TessellationOptions meshOptions = new TessellationOptions(0.00075, 20.0/Math.PI, 5, faceting_tol);  
+            // todo: mininum length control:  faceting_tol = 0.001 in Trelis Dagmc export
             var allBodies = TopologyEntities[VOLUME_INDEX];
             foreach (var ent in allBodies)
             {

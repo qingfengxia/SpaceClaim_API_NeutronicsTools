@@ -125,10 +125,18 @@ namespace Dagmc_Toolbox
             List<RefEntity> surfaces = Helper.GatherAllEntities<DesignFace>(part).ConvertAll<RefEntity>(o => o.Shape);
             List<RefEntity> edges = Helper.GatherAllEntities<DesignEdge>(part).ConvertAll<RefEntity>(o => o.Shape);
             List<RefEntity> vertices = new List<RefEntity>();  // There is no DesignVertex class
+
+            // from each body, it is possible to get all Vertices from Body's Vertices property
+            foreach (var e in bodies)
+            {
+                vertices.AddRange(((RefBody)e).Vertices);
+            }
+            /*          
             foreach(var e in edges)
             {
-                vertices.AddRange(GetEdgeVertices((RefEdge)e));
-            }
+                vertices.AddRange(GetEdgeVertices((RefEdge)e)); 
+                // it seems possible to call first time, but the second time raise RemotingException
+            }*/
 
             // Helper.GatherAllEntities<DesignVertex>(part).ConvertAll<RefVertex>(o => o.Shape);
             GroupEntities = Helper.GatherAllEntities<RefGroup>(part);
@@ -142,12 +150,12 @@ namespace Dagmc_Toolbox
             List<RefEntity> v = new List<RefEntity>();
             try
             {
-                v.Add(edge.StartVertex);  // excpetion here: why?
-                v.Add(edge.EndVertex);  // fixme: some edge has only one Vertex!
+                v.Add(edge.StartVertex); // excpetion here: why?
+                v.Add(edge.EndVertex);   // fixme: some edge has only one Vertex!
             }
             catch(System.Runtime.Remoting.RemotingException e)
             {
-                Debug.WriteLine(e.ToString());
+                Debug.WriteLine("Error in GetEdgeVertices(): " + e.ToString());
             }
             return v;
         }
@@ -194,9 +202,9 @@ namespace Dagmc_Toolbox
         /// In SpaceClaim Tesselation is owned by DesignBody, not by RefBody as in Cubit
         /// </summary>
         /// <returns></returns>
-        private DesignBody FromBodyToDesignBody(in RefBody body)
+        private DesignBody FromBodyToDesignBody(RefBody body)
         {
-            if (BodyToDesignBodyMap.ContainsKey(body))
+            if (BodyToDesignBodyMap.ContainsKey(body))  // GetHashCode() causes System.Runtime.Remoting.RemotingException
                 return BodyToDesignBodyMap[body];
             else
                 return null;
@@ -312,11 +320,11 @@ namespace Dagmc_Toolbox
         /// <returns> return true if sucessful </returns>
         public bool Execute()
         {
+            // message can be TextWriter, instead of Trace/Debug
+            // https://docs.microsoft.com/en-us/dotnet/framework/debug-trace-profile/how-to-create-and-initialize-trace-listeners
+            message.Listeners.Add(new TextWriterTraceListener(ExportedFileName + ".log", "DagmcExporter"));
+            message.WriteLine($"*******************\n stated to export dagmc {DateTime.Now} \n*******************");
 
-            //Moab.Core myMoabInstance = myMoabInstance;
-            //mw = new MakeWatertight(mdbImpl);
-
-            //message.str("");
             bool result = true;
             Moab.ErrorCode rval;
 
@@ -385,6 +393,7 @@ namespace Dagmc_Toolbox
             EntityHandle h = UNINITIALIZED_HANDLE;  /// to mimic "EntityHandle(integer)" in C++
             rval = myMoabInstance.WriteFile(ExportedFileName);
             CheckMoabErrorCode("Error writing h5m mesh file: ", rval);
+
             var vtkFileName = ExportedFileName.Replace(".h5m", ".vtk");
             // give full parameter list, in order to write vtk mesh format
             rval = myMoabInstance.WriteFile(vtkFileName, null, null, ref h, 0, null, 0);
@@ -392,6 +401,9 @@ namespace Dagmc_Toolbox
             
             rval = teardown();  // summary
             CheckMoabErrorCode("Error tearing down export command.", rval);
+
+            // You must close or flush the trace to empty the output buffer.
+            message.Flush();
 
             return result;
         }
@@ -657,7 +669,7 @@ namespace Dagmc_Toolbox
                         }
                         else  // Fixme
                         {
-                            message.WriteLine($"There is logic error, children handle is not found for entity dim = {dim}");
+                            message.WriteLine($"There is logic error in `create_topology()`, children handle is not found for entity dim = {dim}\n");
                         }
                     }
                 }
@@ -1016,12 +1028,13 @@ namespace Dagmc_Toolbox
             foreach (var ent in allBodies)
             {
                 var body = (RefBody)ent;
-                var designBoby = FromBodyToDesignBody(body);
+                var designBoby = FromBodyToDesignBody(body);  // seems can not call twice
                 Moab.Range entities = new Moab.Range();
                 //var designBody = body.
                 foreach (var kv in designBoby.GetEdgeTessellation(body.Edges))
                 {
                     // do nothing, as this function body has been moved/merged with `create_surface_facets()`
+                    add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
                 }
             }
 
@@ -1244,7 +1257,7 @@ namespace Dagmc_Toolbox
         {
             Moab.ErrorCode rval;
 
-            /*             SpaceClaim.Api.V19.Modeler.TessellationOptions:
+            /* SpaceClaim.Api.V19.Modeler.TessellationOptions:
             The default options are:
             • SurfaceDeviation = 0.00075 (0.75 mm)
             • AngleDeviation = 20° (in radians)
@@ -1252,35 +1265,36 @@ namespace Dagmc_Toolbox
             • MaximumEdgeLength = 0 (unspecified)
             */
             TessellationOptions meshOptions = new TessellationOptions(0.00075, 20.0/Math.PI, 5, faceting_tol);  
-            // todo: mininum length control:  faceting_tol = 0.001 in Trelis Dagmc export
+            // tested: mininum length control:  faceting_tol = 0.001 in Trelis Dagmc export
+
             var allBodies = TopologyEntities[VOLUME_INDEX];
             foreach (var ent in allBodies)
             {
                 var body = (RefBody)ent;
                 Moab.Range facet_entities = new Moab.Range();
-                try
+/*                try
                 {
-                    // FIXME: sometime no error here, sometime RemotingException to get DesignBody
+                    /// FIXME: sometime no error here, sometime RemotingException to get DesignBody
                     DesignBody designBody = FromBodyToDesignBody(body);
                     /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
                     foreach (var kv in designBody.GetEdgeTessellation(body.Edges))
                     {
                         add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
                     }
-                    /// todo:  here new tesselaton may be created. 
-                    foreach (var kv in body.GetTessellation(body.Faces, meshOptions))
-                    {
-                        var face = kv.Key;
-                        EntityHandle faceHandle = surface_map[face];
-                        FaceTessellation t = kv.Value;
-                        add_surface_mesh(face, t, faceHandle, ref vertex_map);
-                    }
                 }
                 catch (System.Exception e)
                 {
-                    message.WriteLine("Fixme: Body curve edge saving failed" + e.ToString());
-                }
+                    message.WriteLine("Fixme: Body curve edge saving failed with " + e.ToString());
+                }*/
 
+                /// todo:  here new tesselaton may be created. 
+                foreach (var kv in body.GetTessellation(body.Faces, meshOptions))
+                {
+                    var face = kv.Key;
+                    EntityHandle faceHandle = surface_map[face];
+                    FaceTessellation t = kv.Value;
+                    add_surface_mesh(face, t, faceHandle, ref vertex_map);
+                }
             }
 
             return Moab.ErrorCode.MB_SUCCESS;

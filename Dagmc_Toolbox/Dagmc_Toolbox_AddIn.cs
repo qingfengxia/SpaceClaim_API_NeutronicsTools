@@ -22,7 +22,8 @@ namespace Dagmc_Toolbox
             new Commands.ExportDagmc(),
             new Commands.PrintUid(),
             new Commands.CheckGeometry(),
-            new Commands.CreateGroup()
+            new Commands.CreateGroup(),
+            new Commands.RemoteTrelis()
         };
 
         #region IExtensibility members

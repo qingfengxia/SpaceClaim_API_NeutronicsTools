@@ -80,6 +80,7 @@
     <Compile Include="Commands\CreateGroup.cs" />
     <Compile Include="Commands\DagmcExportor.cs" />
     <Compile Include="Commands\DoubleMap.cs" />
+    <Compile Include="PointHasher.cs" />
     <Compile Include="Commands\PrintUid.cs" />
     <Compile Include="Dagmc_Toolbox.Helper.cs" />
     <Compile Include="Dagmc_Toolbox.Types.cs" />
@@ -131,7 +132,7 @@
     <None Include="TemplateReadme.md" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Test\" />
+    <Folder Include="Tests\" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Properties\Resources.resx">

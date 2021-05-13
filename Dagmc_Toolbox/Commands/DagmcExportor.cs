@@ -322,8 +322,15 @@ namespace Dagmc_Toolbox
         {
             // message can be TextWriter, instead of Trace/Debug
             // https://docs.microsoft.com/en-us/dotnet/framework/debug-trace-profile/how-to-create-and-initialize-trace-listeners
-            message.Listeners.Add(new TextWriterTraceListener(ExportedFileName + ".log", "DagmcExporter"));
+            var logFileName = ExportedFileName + ".log";  
+            if(File.Exists(logFileName))  // remove the existing log first, listener seems will not appending
+            { 
+                File.Delete(logFileName); 
+            }
+            message.Listeners.Add(new TextWriterTraceListener(logFileName, "DagmcExporter"));
             message.WriteLine($"*******************\n stated to export dagmc {DateTime.Now} \n*******************");
+
+            PointHasher.Test();  // unit test code, to be removed later
 
             bool result = true;
             Moab.ErrorCode rval;
@@ -563,7 +570,7 @@ namespace Dagmc_Toolbox
             Moab.ErrorCode rval;
             // Group set is created in a new function `create_group_sets()`
             /// FIXME: dim = 0, has error
-            for (int dim = 1; dim < 4; dim++)  // collect all vertices, edges, faces, bodies
+            for (int dim = 0; dim < 4; dim++)  // collect all vertices, edges, faces, bodies
             {
                 // declare new List here, no need for entlist.clean_out(); entlist.reset();
                 var entlist = (List<RefEntity>)(TopologyEntities[dim]);  /// FIXME !!! from Object to List<> cast is not working
@@ -997,7 +1004,9 @@ namespace Dagmc_Toolbox
         Moab.ErrorCode create_vertices(ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
-            foreach (var key in vertex_map.Keys)
+            var keys = new List<RefEntity>(vertex_map.Keys);
+            foreach (var key in keys)
+            // collection is NOT allowed to be modified during iterating before net 5
             {
                 EntityHandle h = UNINITIALIZED_HANDLE;
                 RefVertex v = (RefVertex)key;
@@ -1014,7 +1023,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        ///  code has been merged into create_surface_facets() for performance.
+        ///  this function may be merged into create_surface_facets() for performance.
         /// </summary>
         /// <param name="curve_map"></param>
         /// <param name="vertex_map"></param>

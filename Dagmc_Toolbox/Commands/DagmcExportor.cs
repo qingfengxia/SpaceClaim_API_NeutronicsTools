@@ -1134,20 +1134,42 @@ namespace Dagmc_Toolbox
             {
 
 #if USE_DESIGN_OBJECT
-                var designBoby = (RefBody)ent;
-                var edges = designBoby.Shape.Edges;
+                var designBody = (RefBody)ent;
+                var edges = designBody.Shape.Edges;
 #else
                 var body = (RefBody)ent;
                 var designBoby = DesignBody.GetDesignBody(body);
                 var edges = body.Edges;
 #endif
                 Moab.Range entities = new Moab.Range();
-                //var designBody = body.
-                foreach (var kv in designBoby.GetEdgeTessellation(edges))
+
+                try  // TODO: get StartVertex may trigger RemotingException
                 {
-                    // do nothing, as this function body has been moved/merged with `create_surface_facets()`
-                    //add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
+                    /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
+                    var uniqueEdges = new List<Edge>();
+
+                    foreach (var e in designBody.Edges)
+                    {
+                        if (DuplicatedEdgeMonikerMap.ContainsKey(e.Moniker))
+                        {
+                            // skip duplicated edge
+                            message.WriteLine("Debug: skip duplicated edge");
+                        }
+                        else
+                        {
+                            foreach (var kv in designBody.GetEdgeTessellation(edges))
+                            {
+                                var edgeHandle = edge_map[e];
+                                add_edge_mesh(kv.Key, kv.Value, ref edgeHandle, ref vertex_map);
+                            }
+                        }
+                    }
                 }
+                catch (System.Exception e)
+                {
+                    message.WriteLine("Fixme: Body curve edge saving failed with " + e.ToString());
+                }
+
             }
 
             return Moab.ErrorCode.MB_SUCCESS;
@@ -1215,11 +1237,10 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        Moab.ErrorCode add_edge_mesh(in Edge edge, ICollection<Point> points, ref RefEntityHandleMap edge_map,
+        Moab.ErrorCode add_edge_mesh(in Edge edge, ICollection<Point> points, ref EntityHandle edgeHandle,
                                ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
-            EntityHandle edgeHandle = edge_map[edge];
 
             if (Moab.ErrorCode.MB_SUCCESS != check_edge_mesh(in edge, points))
                 return Moab.ErrorCode.MB_FAILURE;
@@ -1364,7 +1385,7 @@ namespace Dagmc_Toolbox
         }
 
 
-        /// create_curve_facets() moved here for performance and diff API design in SpaceClaim
+
         Moab.ErrorCode create_surface_facets(ref RefEntityHandleMap surface_map, ref RefEntityHandleMap edge_map,
                                              ref RefEntityHandleMap vertex_map)
         {
@@ -1392,19 +1413,6 @@ namespace Dagmc_Toolbox
                 var designBody = FromBodyToDesignBody(body);
 #endif
                 Moab.Range facet_entities = new Moab.Range();
-                try  // TODO: get StartVertex may trigger RemotingException
-                {                  
-                    /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
-                    foreach (var kv in designBody.GetEdgeTessellation(body.Edges))
-                    {
-                        add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    message.WriteLine("Fixme: Body curve edge saving failed with " + e.ToString());
-                }
-
 
                 foreach(var f in designBody.Faces)
                 {

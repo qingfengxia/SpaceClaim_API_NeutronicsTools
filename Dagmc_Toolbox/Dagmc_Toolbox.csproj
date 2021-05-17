@@ -40,15 +40,37 @@
     <ProjectReference Include="D:\MyData\StepMultiphysics\DAGMC_Plugin\MOABSharp\MOABSharp\MOABSharp.csproj">
       <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
     </ProjectReference>
+    <Reference Include="Acis">
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\Acis.dll</HintPath>
+    </Reference>
+    <Reference Include="CAENominal, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\CAENominal.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Commands, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\Commands.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\Core.dll</HintPath>
     </Reference>
     <Reference Include="CppSharp.Runtime">
       <HintPath>..\..\MOABSharp\MOABSharp\bin\Debug\netstandard2.0\CppSharp.Runtime.dll</HintPath>
     </Reference>
     <Reference Include="MOABSharp">
       <HintPath>..\..\MOABSharp\MOABSharp\bin\Debug\netstandard2.0\MOABSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Modeler, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\Modeler.dll</HintPath>
+    </Reference>
+    <Reference Include="Nom, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\Nom.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="SpaceClaim.Api.V19, Version=19.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
@@ -61,6 +83,12 @@
     <Reference Include="SpaceClaim.Foundation, Version=14.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Foundation.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SpaceClaim.Geometry, Version=14.1.17034.0, Culture=neutral, PublicKeyToken=7210645d4d5e3a39, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\ANSYS Inc\v195\scdm\SpaceClaim.Geometry.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

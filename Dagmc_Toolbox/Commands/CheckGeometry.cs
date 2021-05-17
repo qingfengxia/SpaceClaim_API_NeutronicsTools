@@ -50,22 +50,23 @@ namespace Dagmc_Toolbox.Commands
 
             //var allVis = Helper.GatherAllVisibleBodies(rootPart, window);
 
-            foreach (IDesignBody temp in allBodies)
+            foreach (DesignBody body in allBodies)
             {
-                DesignBody body = temp.Master;
-                //System.Threading.ThreadPool.QueueUserWorkItem(new System.Threading.WaitCallback(this.CheckBody), body);
+                var rawBody = body.Shape.Subject;  // null here
+                System.Threading.ThreadPool.QueueUserWorkItem(new System.Threading.WaitCallback(this.CheckBody), rawBody);
                 //SpaceClaim.Api.V19.Scripting.Internal.CustomMethods.QACheckBody(body, 70);
 //#if API_LEVEL_19
                 // tested it is fine in MainThread
-                var result = ApplicationHelper.CheckGeometry(Selection.Create(body));
+                //var result = ApplicationHelper.CheckGeometry(Selection.Create(body));
 //#endif
             }
         }
 
         protected void CheckBody(Object obj)
         {
-            DesignBody body = (DesignBody)obj;
-            var result = ApplicationHelper.CheckGeometry(Selection.Create(body));
+            var rawBody = (SpaceClaim.Modeler.ISolidBody)obj;
+            List<SpaceClaim.CheckMessage> messages = new List<SpaceClaim.CheckMessage>();
+            rawBody.Check(SpaceClaim.ModelerCheckLevel.CompleteCheck_70, true, messages);
             //
             //SpaceClaim.Api.V19.Scripting.Internal.CustomMethods.QACheckBody(designBody, 70);
         }

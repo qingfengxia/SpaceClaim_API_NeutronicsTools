@@ -105,6 +105,14 @@ namespace Dagmc_Toolbox
         List<RefEntity>[] TopologyEntities;
         List<RefGroup> GroupEntities;
 
+        private void GenerateSharedTopology(Part part)
+        {
+            
+            var g = part.Analysis.SharedEdgeGroups;
+            // var p = (SpaceClaim.IPart)part;  // todo: this conversion is not working
+            //var a = SpaceClaim.SharedTopologyDataUpdater.GetSharedTopologyDataUpdater(p);
+        }
+
         /// <summary>
         /// private helper function to initialize the TopologyEntities data structure
         /// assuming all topology objects are within the ActivePart in the ActiveDocument
@@ -115,10 +123,10 @@ namespace Dagmc_Toolbox
             Part part = Helper.GetActiveMainPart();  // todo: can a document have multiple Parts?
             var allBodies = Helper.GatherAllEntities<DesignBody>(part);
             List<RefEntity> bodies = allBodies.ConvertAll<RefEntity>(o => o.Shape);
-            foreach(var b in allBodies)
+/*            foreach(var b in allBodies)
             {
                 BodyToDesignBodyMap[b.Shape] = b;
-            }
+            }*/
 
             // todo:  there is anther way to get all Faces, adding all Faces of body together,
             // needs unit test to check the diff, and face count. 
@@ -196,6 +204,7 @@ namespace Dagmc_Toolbox
             }
         }
 
+        /*
         private Dictionary<RefBody, DesignBody> BodyToDesignBodyMap = new Dictionary<RefBody, DesignBody>();
 
         /// <summary>
@@ -209,6 +218,7 @@ namespace Dagmc_Toolbox
             else
                 return null;
         }
+        */
         #endregion
 
         #region UniqueEntityID
@@ -1037,7 +1047,7 @@ namespace Dagmc_Toolbox
             foreach (var ent in allBodies)
             {
                 var body = (RefBody)ent;
-                var designBoby = FromBodyToDesignBody(body);  // seems can not call twice
+                var designBoby = DesignBody.GetDesignBody(body);  
                 Moab.Range entities = new Moab.Range();
                 //var designBody = body.
                 foreach (var kv in designBoby.GetEdgeTessellation(body.Edges))

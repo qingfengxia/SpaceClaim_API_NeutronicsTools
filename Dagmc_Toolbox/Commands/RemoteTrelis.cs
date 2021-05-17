@@ -57,19 +57,24 @@ namespace Dagmc_Toolbox.Commands
             var allBodies = Helper.GatherAllEntities<DesignBody>(part);
             //var allVis = Helper.GatherAllVisibleBodies(rootPart, window);
             var lines = new List<string> { "[" };
-            foreach (IDesignBody body in allBodies)
+            foreach (DesignBody body in allBodies)
             {
                 //export body into a file
                 // Path.Combine(workdir, filename)
-                string filename = "todo";
-                string matname = "get materil anme";
+                string bodyname = body.Name;  // todo not unique
+                string filename = bodyname + ".sat";
+                body.Save(BodySaveFormat.Text, filename);  // save to sat only
+                string matname = "Unknown";
+                if (body.Material != null)  // todo: get materail info from group
+                {
+                    matname = body.Material.Name;
+                }
                 string[] entryLines = { 
                     "{", 
                         $"    \"filename\": \"{filename}\",",
                         $"    \"material\": \"{matname}\"",
                     "}" };
                 lines.AddRange(entryLines);
-
             }
             lines.Append("]");
             File.WriteAllLines(Path.Combine(workdir, "manifest.json"), lines);

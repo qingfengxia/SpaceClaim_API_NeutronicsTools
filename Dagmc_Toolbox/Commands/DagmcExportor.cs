@@ -1119,7 +1119,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        ///  this function may be merged into create_surface_facets() for performance.
+        ///  TODO + FIXME: get StartVertex may trigger RemotingException
         /// </summary>
         /// <param name="curve_map"></param>
         /// <param name="vertex_map"></param>
@@ -1143,7 +1143,7 @@ namespace Dagmc_Toolbox
 #endif
                 Moab.Range entities = new Moab.Range();
 
-                try  // TODO: get StartVertex may trigger RemotingException
+                try  
                 {
                     /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
                     var uniqueEdges = new List<Edge>();
@@ -1160,7 +1160,15 @@ namespace Dagmc_Toolbox
                             foreach (var kv in designBody.GetEdgeTessellation(edges))
                             {
                                 var edgeHandle = edge_map[e];
-                                add_edge_mesh(kv.Key, kv.Value, ref edgeHandle, ref vertex_map);
+                                var edgeID = getUniqueId(e);
+                                if (Moab.ErrorCode.MB_SUCCESS == check_edge_mesh(kv.Key, kv.Value, edgeID))
+                                {
+                                    add_edge_mesh(kv.Key, kv.Value, ref edgeHandle, ref vertex_map);
+                                }
+                                else
+                                {
+                                    message.WriteLine($"WARN: edge mesh check failed for edge {edgeID}, skip mesh export");
+                                }
                             }
                         }
                     }
@@ -1175,7 +1183,14 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        Moab.ErrorCode check_edge_mesh(in Edge edge, ICollection<Point> points)
+        /// <summary>
+        /// consider to 
+        /// fixme:  getUniqueId(edge) is not working
+        /// </summary>
+        /// <param name="edge"></param>
+        /// <param name="points"></param>
+        /// <returns></returns>
+        Moab.ErrorCode check_edge_mesh(in Edge edge, ICollection<Point> points, int edgeID)
         {
             var curve = edge.GetGeometry<Curve>();  // may return null
             if (points.Count == 0)
@@ -1183,14 +1198,14 @@ namespace Dagmc_Toolbox
                 // check if fatal error found on curves
                 if (fatal_on_curves)
                 {
-                    message.WriteLine($"Failed to facet the curve with id: {getUniqueId(edge)}");
+                    message.WriteLine($"Failed to facet the curve with id: {edgeID}");
                     return Moab.ErrorCode.MB_FAILURE;
                 }
                 // otherwise record them
                 else
                 {
                     failed_curve_count++;
-                    failed_curves.Add(getUniqueId(edge));
+                    failed_curves.Add(edgeID);
                     return Moab.ErrorCode.MB_FAILURE;
                 }
             }
@@ -1216,7 +1231,7 @@ namespace Dagmc_Toolbox
             bool closed = (points.Last() - points.First()).Magnitude < GEOMETRY_RESABS;
             if (closed != (start_vtx == end_vtx))
             {
-                message.WriteLine($"Warning: topology and geometry inconsistant for possibly closed curve id = {getUniqueId(edge)}");
+                message.WriteLine($"Warning: topology and geometry inconsistant for possibly closed curve id = {edgeID}");
             }
 
             // Check proximity of vertices to end coordinates
@@ -1227,7 +1242,7 @@ namespace Dagmc_Toolbox
                 curve_warnings--;
                 if (curve_warnings >= 0 || verbose_warnings)
                 {
-                    message.WriteLine($"Warning: vertices not at ends of curve id = {getUniqueId(edge)}");
+                    message.WriteLine($"Warning: vertices not at ends of curve id = {edgeID}");
                     if (curve_warnings == 0 && !verbose_warnings)
                     {
                         message.WriteLine("further instances of this warning will be suppressed...");
@@ -1241,9 +1256,6 @@ namespace Dagmc_Toolbox
                                ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
-
-            if (Moab.ErrorCode.MB_SUCCESS != check_edge_mesh(in edge, points))
-                return Moab.ErrorCode.MB_FAILURE;
 
             // Todo: Need to reverse point sequence
             //if (curve->bridge_sense() == CUBIT_REVERSED)

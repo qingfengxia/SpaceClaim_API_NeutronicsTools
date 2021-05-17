@@ -1,3 +1,6 @@
+#define USE_DESIGN_OBJECT
+#define USE_OBJECT_AS_ENTITY
+
 using System;
 using System.IO;
 using System.Collections.Generic;
@@ -27,12 +30,26 @@ using EntityHandle = System.UInt64;   // type alias is only valid in the source 
 /// type alias to help Cubit/Trelis developers to understand SpaceClaim API
 ///using RefEntity = SpaceClaim.Api.V19.Geometry.IShape;
 using RefGroup = SpaceClaim.Api.V19.Group;   /// Group is not derived from Modeler.Topology
-using RefEntity = SpaceClaim.Api.V19.Modeler.Topology;
+
 // RefVolume has no mapping in SpaceClaim
+
+#if USE_DESIGN_OBJECT
+#if USE_OBJECT_AS_ENTITY
+using RefEntity = System.Object;
+#else
+using RefEntity = SpaceClaim.Api.V19.DocObject;
+#endif
+using RefBody = SpaceClaim.Api.V19.DesignBody;
+using RefFace = SpaceClaim.Api.V19.DesignFace;
+using RefEdge = SpaceClaim.Api.V19.DesignEdge;
+using RefVertex = SpaceClaim.Api.V19.Modeler.Vertex;
+#else
+using RefEntity = SpaceClaim.Api.V19.Modeler.Topology;
 using RefBody = SpaceClaim.Api.V19.Modeler.Body;
 using RefFace = SpaceClaim.Api.V19.Modeler.Face;
 using RefEdge = SpaceClaim.Api.V19.Modeler.Edge;
 using RefVertex = SpaceClaim.Api.V19.Modeler.Vertex;
+#endif
 using Primitive = System.Double;
 using SpaceClaim.Api.V19.Scripting.Commands.CommandOptions;
 
@@ -88,7 +105,7 @@ namespace Dagmc_Toolbox
         readonly double GEOMETRY_RESABS = 1.0E-6;  /// Trelis SDK /utl/GeometryDefines.h
 
         /// Topology related functions, to cover the difference between Cubit and SpaceClaim
-        #region TopologyMap
+#region TopologyMap
         readonly string[] GEOMETRY_NAMES = { "Vertex", "Curve", "Surface", "Volume", "Group"};
         /// <summary>
         /// NOTE const instead of readonly, because const int is needed in switch case loop
@@ -103,13 +120,38 @@ namespace Dagmc_Toolbox
         /// consider:  split out Group, then user type-safer `List<RefEntity>[] TopologyEntities;  `
         /// </summary>
         List<RefEntity>[] TopologyEntities;
+#if !USE_OBJECT_AS_ENTITY
+        List<RefVertex> VertexEntities;
+#endif
         List<RefGroup> GroupEntities;
 
-        private void GenerateSharedTopology(Part part)
+        /// <summary>
+        /// HashMap maybe needed, to find the original/unique face/edge
+        /// is that possible to reserve capacity, to avoid dynamic memmory/container expansion?
+        /// </summary>
+        Dictionary<Moniker<DesignFace>, DesignFace> DuplicatedFaceMonikerMap = new Dictionary<Moniker<DesignFace>, DesignFace>() ;
+        Dictionary<Moniker<DesignEdge>, DesignEdge> DuplicatedEdgeMonikerMap = new Dictionary<Moniker<DesignEdge>, DesignEdge>();
+        private void FindSharedTopology(Part part)
         {
-            
-            var g = part.Analysis.SharedEdgeGroups;
-            // var p = (SpaceClaim.IPart)part;  // todo: this conversion is not working
+            foreach (var g in part.Analysis.SharedFaceGroups)
+            {
+                Debug.Assert(g.Count == 2);
+                var l = (IDesignFace[])g;
+                DuplicatedFaceMonikerMap.Add(((DesignFace)l[1]).Moniker, (DesignFace)l[0]);
+            }
+
+            foreach ( var g in part.Analysis.SharedEdgeGroups)
+            {
+                Debug.Assert(g.Count > 1);
+                var l = (IDesignEdge[])g;
+ 
+                for (int i = 1; i < g.Count; i++)
+                {
+                    DuplicatedEdgeMonikerMap.Add(((DesignEdge)l[i]).Moniker, (DesignEdge)l[0]);
+                }
+            }
+
+            // var p = (SpaceClaim.IPart)part;  // Error: can not get SpaceClaim.IPart from Part object
             //var a = SpaceClaim.SharedTopologyDataUpdater.GetSharedTopologyDataUpdater(p);
         }
 
@@ -118,18 +160,29 @@ namespace Dagmc_Toolbox
         /// assuming all topology objects are within the ActivePart in the ActiveDocument
         /// </summary>
         /// <returns></returns>
-        private void GenerateTopologyEntities()
+        private void GenerateTopologyEntities(in Part part)
         {
-            Part part = Helper.GetActiveMainPart();  // todo: can a document have multiple Parts?
-            var allBodies = Helper.GatherAllEntities<DesignBody>(part);
-            List<RefEntity> bodies = allBodies.ConvertAll<RefEntity>(o => o.Shape);
-/*            foreach(var b in allBodies)
-            {
-                BodyToDesignBodyMap[b.Shape] = b;
-            }*/
+
+            GroupEntities = Helper.GatherAllEntities<RefGroup>(part);
 
             // todo:  there is anther way to get all Faces, adding all Faces of body together,
             // needs unit test to check the diff, and face count. 
+#if USE_DESIGN_OBJECT
+            List<RefEntity> bodies = Helper.GatherAllEntities<DesignBody>(part).ConvertAll<RefEntity>(o => (RefEntity)o);
+            List<RefEntity> surfaces = Helper.GatherAllEntities<DesignFace>(part).ConvertAll<RefEntity>(o => (RefEntity)o);
+            List<RefEntity> edges = Helper.GatherAllEntities<DesignEdge>(part).ConvertAll<RefEntity>(o => (RefEntity)o);
+            List<RefEntity> vertices = new List<RefEntity>();  // There is no DesignVertex class
+
+            // from each body, it is possible to get all Vertices from Body's Vertices property
+            foreach (var e in bodies)
+            {
+                vertices.AddRange(((RefBody)e).Shape.Vertices);
+            }
+            TopologyEntities = new List<RefEntity>[] { vertices, edges, surfaces, bodies };
+            //VertexEntities = vertices;
+#else
+            var allBodies = Helper.GatherAllEntities<DesignBody>(part);
+            List<RefEntity> bodies = allBodies.ConvertAll<RefEntity>(o => o.Shape);
             List<RefEntity> surfaces = Helper.GatherAllEntities<DesignFace>(part).ConvertAll<RefEntity>(o => o.Shape);
             List<RefEntity> edges = Helper.GatherAllEntities<DesignEdge>(part).ConvertAll<RefEntity>(o => o.Shape);
             List<RefEntity> vertices = new List<RefEntity>();  // There is no DesignVertex class
@@ -139,6 +192,8 @@ namespace Dagmc_Toolbox
             {
                 vertices.AddRange(((RefBody)e).Vertices);
             }
+            TopologyEntities = new List<RefEntity>[] { vertices,  edges, surfaces, bodies};
+#endif
             /*          
             foreach(var e in edges)
             {
@@ -146,20 +201,18 @@ namespace Dagmc_Toolbox
                 // it seems possible to call first time, but the second time raise RemotingException
             }*/
 
-            // Helper.GatherAllEntities<DesignVertex>(part).ConvertAll<RefVertex>(o => o.Shape);
-            GroupEntities = Helper.GatherAllEntities<RefGroup>(part);
-            TopologyEntities = new List<RefEntity>[] { vertices, edges, surfaces, bodies};
-
         }
+
+#if !USE_OBJECT_AS_ENTITY
         /* Remoting.RemotingException: Object has been disconnected or does not exist at the server
          * */
-        List<RefEntity> GetEdgeVertices(in RefEdge edge)
+        List<RefVertex> GetEdgeVertices(in RefEdge edge)
         {
-            List<RefEntity> v = new List<RefEntity>();
+            List<RefVertex> v = new List<RefVertex>();
             try
             {
-                v.Add(edge.StartVertex); // excpetion here: why?
-                v.Add(edge.EndVertex);   // fixme: some edge has only one Vertex!
+                v.Add(edge.Shape.StartVertex); // excpetion here: why?
+                v.Add(edge.Shape.EndVertex);   // fixme: some edge has only one Vertex!
             }
             catch(System.Runtime.Remoting.RemotingException e)
             {
@@ -167,6 +220,24 @@ namespace Dagmc_Toolbox
             }
             return v;
         }
+#else
+        /* Remoting.RemotingException: Object has been disconnected or does not exist at the server
+         * */
+        List<RefEntity> GetEdgeVertices(in RefEdge edge)
+        {
+            List<RefEntity> v = new List<RefEntity>();
+            try
+            {
+                v.Add(edge.Shape.StartVertex); // excpetion here: why?
+                v.Add(edge.Shape.EndVertex);   // fixme: some edge has only one Vertex!
+            }
+            catch(System.Runtime.Remoting.RemotingException e)
+            {
+                Debug.WriteLine("Error in GetEdgeVertices(): " + e.ToString());
+            }
+            return v;
+        }
+#endif
 
         List<RefEntity> GetBodiesInGroup(in RefGroup group)
         {
@@ -191,8 +262,10 @@ namespace Dagmc_Toolbox
         {
             switch (entity_dim)
             {
+#if USE_OBJECT_AS_ENTITY
                 case 1:
                     return GetEdgeVertices((RefEdge)ent);
+#endif
                 case 2:  // ID entity is edge
                     return ((RefFace)ent).Edges.Cast<RefEntity>().ToList();
                 case 3:
@@ -203,6 +276,12 @@ namespace Dagmc_Toolbox
                     return null;
             }
         }
+#if !USE_DESIGN_OBJECT
+        List<RefVertex> get_child_ref_entities(RefEntity ent)
+        {   
+            return GetEdgeVertices((RefEdge)ent);
+        }
+#endif
 
         /*
         private Dictionary<RefBody, DesignBody> BodyToDesignBodyMap = new Dictionary<RefBody, DesignBody>();
@@ -219,9 +298,9 @@ namespace Dagmc_Toolbox
                 return null;
         }
         */
-        #endregion
+#endregion
 
-        #region UniqueEntityID
+#region UniqueEntityID
         /// <summary>
         /// SpaceClaim only variable, to help generate unique ID for topology entities
         /// it should be used only by generateUniqueId() which must be called in single thread.  
@@ -260,7 +339,7 @@ namespace Dagmc_Toolbox
                 return 0;  // it is not sufficient to indicate no such id,  todo: just throw?
             }*/
         }
-        #endregion
+#endregion
 
         internal string ExportedFileName { get; set; }
 
@@ -268,7 +347,7 @@ namespace Dagmc_Toolbox
         {
             // set default values
             norm_tol = 5;
-            faceting_tol = 1e-3;  // unit m ? 
+            faceting_tol = 3e-3;  // unit m ?  it is extremely slow if set as 1e-3
             len_tol = 0.0;
             verbose_warnings = false;
             fatal_on_curves = false;
@@ -340,7 +419,7 @@ namespace Dagmc_Toolbox
             message.Listeners.Add(new TextWriterTraceListener(logFileName, "DagmcExporter"));
             message.WriteLine($"*******************\n stated to export dagmc {DateTime.Now} \n*******************");
 
-            PointHasher.Test();  // unit test code, to be removed later
+            //PointHasher.Test();  // unit test code, to be removed later, Remoting CrossAppDomain error
 
             bool result = true;
             Moab.ErrorCode rval;
@@ -368,8 +447,11 @@ namespace Dagmc_Toolbox
             rval = parse_options(options, ref file_set);  
             CheckMoabErrorCode("Error parsing options: ", rval);
 
+            Part part = Helper.GetActiveMainPart();  // NOTE: a document have multiple Parts? yes, but one MainPart
             // here there may be random error, can not captured by visual studio debugger
-            GenerateTopologyEntities();  // fill data fields: TopologyEntities , GroupEntities
+            FindSharedTopology(part);
+            GenerateTopologyEntities(part);  // fill data fields: TopologyEntities , GroupEntities
+
             rval = create_entity_sets(entityMaps);
             CheckMoabErrorCode("Error creating entity sets: ", rval);
             //rval = create_group_sets(groupMap);
@@ -658,6 +740,7 @@ namespace Dagmc_Toolbox
         /// <summary> 
         /// write parent-children relationship into MOAB
         ///  PROGRESS: not tested, group-body relation seems not saved
+        ///  TODO: will duplicated face be excluded from the MOAB topology?
         /// </summary>
         /// <remarks> 
         /// SpaceClaim 's Group class is not derived from Topology base, 
@@ -718,17 +801,20 @@ namespace Dagmc_Toolbox
                 List<bool> senses = new List<bool>();
                 RefFace face = (RefFace)(entry.Key);
 
+                //face.Shape.IsReversed;  does not provide the information
+
                 // how to filter the face? for external not shared face? 
 
                 // get senses, for each topology entity in Cubit, connected to more than one upper geometry
                 // IsReverse() ,   but sense only make sense related with Parent Topology Object
                 // Cubut each lower topology types may have more than one upper topology types
-                var bodies = from f in face.AdjacentFaces select f.Body;  // get_parent
+                /// TODO: not correct way
+/*                var bodies = from f in face.AdjacentFaces select f.Parent;  // get_parent
                 foreach (Body b in bodies)
                 {
                     ents.Add(volume_map[b]);
                     senses.Add(face.IsReversed);
-                }
+                }*/
 
                 /* FIXME:
                 RefFace* face = (RefFace*)(ci->first);
@@ -1046,23 +1132,30 @@ namespace Dagmc_Toolbox
             var allBodies = TopologyEntities[VOLUME_INDEX];
             foreach (var ent in allBodies)
             {
+
+#if USE_DESIGN_OBJECT
+                var designBoby = (RefBody)ent;
+                var edges = designBoby.Shape.Edges;
+#else
                 var body = (RefBody)ent;
-                var designBoby = DesignBody.GetDesignBody(body);  
+                var designBoby = DesignBody.GetDesignBody(body);
+                var edges = body.Edges;
+#endif
                 Moab.Range entities = new Moab.Range();
                 //var designBody = body.
-                foreach (var kv in designBoby.GetEdgeTessellation(body.Edges))
+                foreach (var kv in designBoby.GetEdgeTessellation(edges))
                 {
                     // do nothing, as this function body has been moved/merged with `create_surface_facets()`
-                    add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
+                    //add_edge_mesh(kv.Key, kv.Value, ref edge_map, ref vertex_map);
                 }
             }
 
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        Moab.ErrorCode check_edge_mesh(RefEdge edge, ICollection<Point> points)
+        Moab.ErrorCode check_edge_mesh(in Edge edge, ICollection<Point> points)
         {
-            var curve = edge.GetGeometry<Curve>();  // the return may be null
+            var curve = edge.GetGeometry<Curve>();  // may return null
             if (points.Count == 0)
             {
                 // check if fatal error found on curves
@@ -1122,19 +1215,19 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        Moab.ErrorCode add_edge_mesh(RefEdge edge, ICollection<Point> points, ref RefEntityHandleMap edge_map,
+        Moab.ErrorCode add_edge_mesh(in Edge edge, ICollection<Point> points, ref RefEntityHandleMap edge_map,
                                ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
             EntityHandle edgeHandle = edge_map[edge];
-            if (Moab.ErrorCode.MB_SUCCESS != check_edge_mesh(edge, points))
+
+            if (Moab.ErrorCode.MB_SUCCESS != check_edge_mesh(in edge, points))
                 return Moab.ErrorCode.MB_FAILURE;
 
-            var curve = edge.GetGeometry<Curve>();  // the return may be null
-
-            // Todo: Need to reverse data but how?
+            // Todo: Need to reverse point sequence
             //if (curve->bridge_sense() == CUBIT_REVERSED)
             //    std::reverse(points.begin(), points.end());
+            // after reversing, also means reverse start and ending point???
 
             RefVertex start_vtx, end_vtx;
             start_vtx = edge.StartVertex;
@@ -1193,7 +1286,7 @@ namespace Dagmc_Toolbox
         }
 
 
-        Moab.ErrorCode add_surface_mesh(in RefFace face, in FaceTessellation t, EntityHandle faceHandle, ref RefEntityHandleMap vertex_map)
+        Moab.ErrorCode add_surface_mesh(in Face face, in FaceTessellation t, EntityHandle faceHandle, ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
 
@@ -1224,7 +1317,8 @@ namespace Dagmc_Toolbox
                     }
                     else
                     {
-                        message.WriteLine($"Warning: Coincident vertices in surface id = {getUniqueId(face)}, for the point at {pos}");
+                        //message.WriteLine($"Warning: Coincident vertices in surface, for the point at {pos}");
+                        // this huge amount IO slow down the saving process
                     }
                 }
             }
@@ -1289,12 +1383,17 @@ namespace Dagmc_Toolbox
             var allBodies = TopologyEntities[VOLUME_INDEX];
             foreach (var ent in allBodies)
             {
+#if USE_DESIGN_OBJECT
+                var designBody = (RefBody)ent;
+                var body = designBody.Shape;
+
+#else
                 var body = (RefBody)ent;
+                var designBody = FromBodyToDesignBody(body);
+#endif
                 Moab.Range facet_entities = new Moab.Range();
-/*                try
-                {
-                    /// FIXME: sometime no error here, sometime RemotingException to get DesignBody
-                    DesignBody designBody = FromBodyToDesignBody(body);
+                try  // TODO: get StartVertex may trigger RemotingException
+                {                  
                     /// NOTE: may make a smaller Vertex_map, for duplicaet map check, and then merge with global vertex_map
                     foreach (var kv in designBody.GetEdgeTessellation(body.Edges))
                     {
@@ -1304,16 +1403,28 @@ namespace Dagmc_Toolbox
                 catch (System.Exception e)
                 {
                     message.WriteLine("Fixme: Body curve edge saving failed with " + e.ToString());
-                }*/
-
-                /// todo:  here new tesselaton may be created. 
-                foreach (var kv in body.GetTessellation(body.Faces, meshOptions))
-                {
-                    var face = kv.Key;
-                    EntityHandle faceHandle = surface_map[face];
-                    FaceTessellation t = kv.Value;
-                    add_surface_mesh(face, t, faceHandle, ref vertex_map);
                 }
+
+
+                foreach(var f in designBody.Faces)
+                {
+                    List<Face> uniqueFaces = new List<Face>();
+                    if (DuplicatedFaceMonikerMap.ContainsKey(f.Moniker))
+                    {
+                        message.WriteLine("duplicated face has been found ");
+                    }
+                    else
+                    {
+                        uniqueFaces.Add(f.Shape);
+                        foreach (var kv in body.GetTessellation(uniqueFaces, meshOptions))
+                        {
+                            EntityHandle faceHandle = surface_map[f];
+                            FaceTessellation fmesh = kv.Value;
+                            add_surface_mesh(kv.Key, fmesh, faceHandle, ref vertex_map);
+                        }
+                    }
+                }
+
             }
 
             return Moab.ErrorCode.MB_SUCCESS;

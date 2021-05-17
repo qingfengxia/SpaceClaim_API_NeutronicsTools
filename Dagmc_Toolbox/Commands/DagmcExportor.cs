@@ -23,7 +23,7 @@ using Point = SpaceClaim.Api.V19.Geometry.Point;
 using Moab = MOAB.Moab;
 using static MOAB.Constants;
 using static MOAB.Moab.Core;
-using message = System.Diagnostics.Debug;
+//using message = System.Diagnostics.Debug;
 /// EntityHandle depends on C++ build configuration and 64bit or 32bit, see MOAB's header <EntityHandle.hpp>
 using EntityHandle = System.UInt64;   // type alias is only valid in the source file!
 
@@ -342,6 +342,7 @@ namespace Dagmc_Toolbox
 #endregion
 
         internal string ExportedFileName { get; set; }
+        StreamWriter message;
 
         public DagmcExporter()
         {
@@ -416,7 +417,10 @@ namespace Dagmc_Toolbox
             { 
                 File.Delete(logFileName); 
             }
-            message.Listeners.Add(new TextWriterTraceListener(logFileName, "DagmcExporter"));
+
+            //message.Listeners.Add(new TextWriterTraceListener(logFileName, "DagmcExporter"));
+            message = new StreamWriter(logFileName);
+
             message.WriteLine($"*******************\n stated to export dagmc {DateTime.Now} \n*******************");
 
             //PointHasher.Test();  // unit test code, to be removed later, Remoting CrossAppDomain error
@@ -497,12 +501,13 @@ namespace Dagmc_Toolbox
             // give full parameter list, in order to write vtk mesh format
             rval = myMoabInstance.WriteFile(vtkFileName, null, null, ref h, 0, null, 0);
             CheckMoabErrorCode("Error writing vtk mesh file: ", rval);
-            
+
             rval = teardown();  // summary
             CheckMoabErrorCode("Error tearing down export command.", rval);
 
             // You must close or flush the trace to empty the output buffer.
             message.Flush();
+            message.Close();
 
             return result;
         }
@@ -787,6 +792,7 @@ namespace Dagmc_Toolbox
         /// Progress: not understood?
         /// In Cubit from each face it is possible to get both/all bodies that share this face, 
         /// No spaceclaim API has been confirmed, here use some API to close code flow
+        /// Todo: what is the strategy to deal with duplicated face?
         /// </summary>
         /// <param name="surface_map"></param>
         /// <param name="volume_map"></param>
@@ -795,28 +801,27 @@ namespace Dagmc_Toolbox
         {
             Moab.ErrorCode rval;
 
-            foreach (KeyValuePair<RefEntity, EntityHandle> entry in surface_map)
+            foreach (KeyValuePair<RefEntity, EntityHandle> entry in volume_map)
             {
-                List<EntityHandle> ents = new List<EntityHandle>();
-                List<bool> senses = new List<bool>();
-                RefFace face = (RefFace)(entry.Key);
-
-                //face.Shape.IsReversed;  does not provide the information
-
-                // how to filter the face? for external not shared face? 
-
-                // get senses, for each topology entity in Cubit, connected to more than one upper geometry
-                // IsReverse() ,   but sense only make sense related with Parent Topology Object
-                // Cubut each lower topology types may have more than one upper topology types
-                /// TODO: not correct way
-/*                var bodies = from f in face.AdjacentFaces select f.Parent;  // get_parent
-                foreach (Body b in bodies)
+                RefBody body = (RefBody)entry.Key;
+                //List<EntityHandle> ents = new List<EntityHandle>();
+                //List<Moab.SenseType> senses = new List<Moab.SenseType>();
+                foreach (var face in body.Faces)
                 {
-                    ents.Add(volume_map[b]);
-                    senses.Add(face.IsReversed);
-                }*/
+                    var sense = Moab.SenseType.SENSE_FORWARD;
+                    if (face.Shape.IsReversed)
+                        sense = Moab.SenseType.SENSE_REVERSE;
 
-                /* FIXME:
+                    rval = myGeomTool.SetSense(surface_map[face], volume_map[body], (int)sense);
+                    if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
+                }
+
+                // sense only make sense related with Parent Topology Object
+                // Cubut each lower topology types may have more than one upper topology types
+
+
+                /* this code block blow do check_surface_sense(), it is not needed in SpaceClaim
+                 * 
                 RefFace* face = (RefFace*)(ci->first);
                 BasicTopologyEntity *forward = 0, *reverse = 0;
                 for (SenseEntity* cf = face->get_first_sense_entity_ptr();
@@ -848,24 +853,22 @@ namespace Dagmc_Toolbox
                   }
                 */
 
-
-                /*  todo: check 
-                for (int i = 0; i < ents.Count; i++)
+                /*  set sense in C#
+                 * for (int i = 0; i < ents.Count; i++)
                 {
-                    myGeomTool.SetSense(entry.Value, ents[i], senses[i]);
+                    rval = myGeomTool.SetSense(entry.Value, ents[i], senses[i]);
+                    if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
                 }
-                bool reverse = false;
-
-                // set sense
+                // set sense in C++
                 if (! reverse)
                 {
-                    rval = myGeomTool->set_sense(ci->second, volume_map[forward], moab::SENSE_FORWARD);
-                    if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
+                rval = myGeomTool->set_sense(ci->second, volume_map[forward], moab::SENSE_FORWARD);
+                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
                 }
                 if (reverse)
                 {
-                    rval = myGeomTool->set_sense(ci->second, volume_map[reverse], moab::SENSE_REVERSE);
-                    if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
+                rval = myGeomTool->set_sense(ci->second, volume_map[reverse], moab::SENSE_REVERSE);
+                if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
                 }
                 */
             }
@@ -976,7 +979,8 @@ namespace Dagmc_Toolbox
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return Moab.ErrorCode.MB_FAILURE;
 
-                // TODO: missing code: Check for extra group names  there may be no such things in SpaceClaim
+                // TODO:  Check for extra group names
+                // there may be no such things in SpaceClaim
                 /*
                 if (name_list.size() > 1)
                 {
@@ -1013,6 +1017,18 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
+        private int _get_entity_dim(in RefEntity obj)
+        {
+            if (null != (DesignBody)obj)
+                return 3;
+            else if (null != (DesignFace)obj)
+                return 2;
+            else if (null != (DesignEdge)obj)
+                return 1;
+            else
+                return -1; // should couse runtime error if used
+        }
+
         /// <summary>
         /// Progress: not completed due to mismatched API
         ///  This function will be dramatically diff from Trelis DAGMC Plugin in C++
@@ -1020,7 +1036,9 @@ namespace Dagmc_Toolbox
         /// </summary>
         /// <param name="entitymap"></param>
         /// <returns></returns>
-        // refentity_handle_map (&entitymap)[5]
+        /// <remarks>  In Cubit, A group can contains another group as child, but it is not possible in SpaceClaim
+        /// but spaceClaim has no DesignVertex to select point, only dim =1, 2, 3 are supported
+        /// </remarks>
         Moab.ErrorCode store_group_content(RefEntityHandleMap[] entitymap, ref GroupHandleMap groupMap)
         {
             Moab.ErrorCode rval;
@@ -1031,8 +1049,7 @@ namespace Dagmc_Toolbox
                 Moab.Range entities = new Moab.Range();
                 foreach (DocObject obj in gh.Key.Members)  // Cubit: grp->get_child_ref_entities(entlist);
                 {
-                    // In Cubit, A group can contains another group as child, but it is not possible in SpaceClaim
-                    // so these 2 lines are not needed in SpaceClaim
+                    // Group can not contain another group these 2 lines below are not needed in SpaceClaim
                     /*
                     if (entitymap[4].find(ent) != entitymap[4].end())
                     {
@@ -1040,9 +1057,14 @@ namespace Dagmc_Toolbox
                         entities.insert(entitymap[4][ent]);
                     }
                     */
-
-                    if (null != (DesignBody)obj) 
+                    int dim = _get_entity_dim(obj);
+                    if (dim <= 3)
                     {
+                        if (entitymap[dim].ContainsKey(obj))
+                            entities.Insert(entitymap[dim][obj]);
+                    }
+                    if (dim == 3)
+                    { 
                         var body = (DesignBody)obj;
                         var ent = body.Shape;
                         // FIXME: from Body get a list of Volumes, but there is no such API/concept in SpaceClaim
@@ -1063,22 +1085,11 @@ namespace Dagmc_Toolbox
                           }
                         */
                     }
-                    else // not a Body geometry
-                    {
-                        //int dim = 1;  // get dim/type of geometry/topology type, need a helper function
-                        // FIXME: yet translated code
-                        /*
-                        if (dim < 4)
-                        {
-                            if (entitymap[dim].find(ent) != entitymap[dim].end())
-                                entities.insert(entitymap[dim][ent]);
-                        }
-                        */
-                    }
+
                 }
                 if (!entities.Empty)
                 {
-                    rval = myMoabInstance.AddEntities(gh.Value, entities);
+                    rval = myMoabInstance.AddEntities(gh.Value, entities);  // not unit tested
                     if (Moab.ErrorCode.MB_SUCCESS != rval)
                         return rval;
                 }
@@ -1198,7 +1209,7 @@ namespace Dagmc_Toolbox
                 // check if fatal error found on curves
                 if (fatal_on_curves)
                 {
-                    message.WriteLine($"Failed to facet the curve with id: {edgeID}");
+                    message.WriteLine($"Error: Failed to facet the curve with id: {edgeID}");
                     return Moab.ErrorCode.MB_FAILURE;
                 }
                 // otherwise record them
@@ -1213,13 +1224,11 @@ namespace Dagmc_Toolbox
             if (points.Count < 2)
             {
                 var interval = 1e-3;  // todo, not compilable code
-                /*
-                if (curve.GetLength(interval) > GEOMETRY_RESABS)   // `start_vtx != end_vtx`  not necessary
+                if (edge.Length < GEOMETRY_RESABS)   // `start_vtx != end_vtx`  not necessary
                 {
-                    message.WriteLine($"Warning: No facetting for curve {edge.GetHashCode()}");
+                    message.WriteLine($"Warning: No facetting for curve shorter than length threshold {edgeID}");
                     return Moab.ErrorCode.MB_FAILURE;
                 }
-                */
             }
 
             // Check for closed curve

@@ -128,7 +128,7 @@ namespace Dagmc_Toolbox
 
 #if USE_POINT_HASH
         PointHasher MyPointHasher;
-        Dictionary<ulong, EntityHandle> PointHashHandleMap = new Dictionary<ulong, EntityHandle>();
+        Dictionary<ulong, EntityHandle> PointHashHandleMap;
 #else
         Dictionary<Point, EntityHandle> PointsOnEdgeHandleMap = new Dictionary<Point, EntityHandle>();
 #endif
@@ -365,6 +365,7 @@ namespace Dagmc_Toolbox
 
             myMoabInstance = new Moab.Core();
             myGeomTool = new Moab.GeomTopoTool(myMoabInstance, false, 0, true, true);  //  missing binding has been manually added
+
         }
 
         /// <summary>
@@ -465,10 +466,12 @@ namespace Dagmc_Toolbox
             GenerateTopologyEntities(part);  // fill data fields: TopologyEntities , GroupEntities
 
 #if USE_POINT_HASH
-            Box box = part.Box; 
-            MyPointHasher = new PointHasher(box.MinPoint, box.MaxPoint);
+            Box box = Helper.GetBoundingBox(part);
+            MyPointHasher = new PointHasher(box.MinCorner, box.MaxCorner);
+            PointHashHandleMap = new Dictionary<ulong, EntityHandle>();
             //PointHasher.Test();  // unit test code, to be removed later, Remoting CrossAppDomain error
 #endif
+
             rval = create_entity_sets(entityMaps);
             CheckMoabErrorCode("Error creating entity sets: ", rval);
             //rval = create_group_sets(groupMap);
@@ -1120,7 +1123,7 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        Moab.ErrorCode _add_vertex(in Point pos,  ref EntityHandle h, bool on_edge = false)
+        Moab.ErrorCode _add_vertex(Point pos,  ref EntityHandle h, bool on_edge = false)
         {
             Moab.ErrorCode rval;
             double[] coords = { pos.X, pos.Y, pos.Z };
@@ -1133,10 +1136,14 @@ namespace Dagmc_Toolbox
                 ulong hid = MyPointHasher.PointToHash(pos);
                 PointHashHandleMap.Add(hid, h);
 #else
-                PointsOnEdgeHandleMap.Add(pos, h);
+                // PointsOnEdgeHandleMap[pos] = h;  // working, not in use FIXME: 
+                // Exception	Message	"Operation is not valid due to the current state of the object."
+                // it is a Remote object , why it is  
+                // 	GetHashCode()	CustomAttributes	Method System.Reflection.MemberInfo.get_CustomAttributes cannot be called in this context.	System.Collections.Generic.IEnumerable<System.Reflection.CustomAttributeData>
+
 #endif
             }
-            
+
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
@@ -1154,7 +1161,9 @@ namespace Dagmc_Toolbox
             if(PointHashHandleMap.ContainsKey(hid))
                 return PointHashHandleMap[hid];
 #else
-            foreach (var v in vertex_map.Keys)  // use PointsOnEdgeHandleMap should be faster
+#if true
+            // complexity increase with N*N for N points
+            foreach (var v in vertex_map.Keys)  
             {
                 var pos = ((RefVertex)v).Position;
 
@@ -1163,6 +1172,18 @@ namespace Dagmc_Toolbox
                     return vertex_map[v];
                 }
             }
+#else
+            // use PointsOnEdgeHandleMap should be faster
+            foreach (var pp in PointsOnEdgeHandleMap.Keys)  
+            {
+                Point pos = Point.Create(pp[0], pp[1], pp[2]);
+                if ((pos - p).Magnitude < GEOMETRY_RESABS)  // length_square < GEOMETRY_RESABS*GEOMETRY_RESABS
+                {
+                    return PointsOnEdgeHandleMap[pp];
+                }
+            }
+
+#endif
 #endif
             return UNINITIALIZED_HANDLE;
         }
@@ -1325,6 +1346,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
+        /// API is not understood yet, not sure if reverse points is needed in SpaceClaim
         /// FIXME: failed to get Starting and Ending Vertex, RemotingException/no such key
         /// </summary>
         /// <param name="edge"></param>
@@ -1357,21 +1379,28 @@ namespace Dagmc_Toolbox
 
             var segs = new List<EntityHandle>();
             var verts = new List<EntityHandle>();
-            /// FIXME: no such key in map,  skip now
-            //verts.Add(vertex_map[start_vtx]);  
-            // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
+           
+            //verts.Add(vertex_map[start_vtx]);   /// FIXME: no such key in map,  due to error in create_vertices()
+            // checked: in spaceclaim the edge tessellation has starting and ending vertex
             foreach (var point in points)  
             {
                 EntityHandle h = UNINITIALIZED_HANDLE;
                 /// this assertion can confirm start and ending vertex is not in the point list
-                Debug.Assert(_vertex_handle(point, vertex_map) == UNINITIALIZED_HANDLE);
-                rval = _add_vertex(point, ref h, true);
-                if (Moab.ErrorCode.MB_SUCCESS != rval)
-                    return Moab.ErrorCode.MB_FAILURE;
+                // Debug.Assert(_vertex_handle(point, vertex_map) == UNINITIALIZED_HANDLE);
+                // In SpaceClaim, curve mesh does include the starting and ending points
+                h = _vertex_handle(point, vertex_map);
+                if (h == UNINITIALIZED_HANDLE)
+                {
+                    rval = _add_vertex(point, ref h, true);
+                    if (Moab.ErrorCode.MB_SUCCESS != rval)
+                        return Moab.ErrorCode.MB_FAILURE;
+                    // CHECKED,  no vertex is created for on edge points (excepts starting and eding points), 
+                    // no points/vertex is added to vertex_map
+                    // it means there is duplicated points on edges, but it may does not affect simulation
+                }
                 verts.Add(h);
             }
-            /// FIXME: no such key in map,  skip now
-            //verts.Add(vertex_map[end_vtx]); // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
+            //verts.Add(vertex_map[end_vtx]); 
 
             EntityHandle[] meshVerts = verts.ToArray();
             // Create edges, can this be skipped?
@@ -1460,6 +1489,9 @@ namespace Dagmc_Toolbox
             rval = myMoabInstance.AddEntities(faceHandle, ref meshFaces[0], meshFaces.Length);
             if (Moab.ErrorCode.MB_SUCCESS != rval)
                 return Moab.ErrorCode.MB_FAILURE;
+
+            // todo: registered to other face handle, that share the interior facets,
+            // or surface_map has already remove the duplicated (only one face kept for a shared face group)
 
             return Moab.ErrorCode.MB_SUCCESS;
         }

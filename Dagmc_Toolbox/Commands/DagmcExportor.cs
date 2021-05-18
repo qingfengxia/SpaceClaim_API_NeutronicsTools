@@ -1,6 +1,6 @@
 #define USE_DESIGN_OBJECT
 #define USE_OBJECT_AS_ENTITY
-//#define USE_POINT_HASH
+#define USE_POINT_HASH
 
 using System;
 using System.IO;
@@ -1134,7 +1134,15 @@ namespace Dagmc_Toolbox
             {
 #if USE_POINT_HASH
                 ulong hid = MyPointHasher.PointToHash(pos);
-                PointHashHandleMap.Add(hid, h);
+                if (PointHashHandleMap.ContainsKey(hid))
+                {
+                    // currently impl, has duplicated points on the shared edge group, even vertices may concide
+                    //h = PointHashHandleMap[hid];  
+                    //message.WriteLine($"WARNING: point `{pos}` has existed hash as {hid}, use the existing point handle instead");
+                }
+                else { 
+                    PointHashHandleMap.Add(hid, h);
+                }
 #else
                 // PointsOnEdgeHandleMap[pos] = h;  // working, not in use FIXME: 
                 // Exception	Message	"Operation is not valid due to the current state of the object."

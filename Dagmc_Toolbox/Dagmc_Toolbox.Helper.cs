@@ -29,6 +29,34 @@ namespace Dagmc_Toolbox
             //doc.MainPart.GetDescendants<Group>();  // group belongs to Part, a collection of DocObject
             return doc.MainPart;
         }
+
+        static public Box MergeBoundingBoxes(in Box b1, in Box b2)
+        {
+            Point min = Point.Create(Math.Min(b1.MinCorner.X, b2.MinCorner.X),
+                Math.Min(b1.MinCorner.Y, b2.MinCorner.Y),
+                Math.Min(b1.MinCorner.Z, b2.MinCorner.Z)
+                ); 
+            Point max = Point.Create(Math.Max(b1.MaxCorner.X, b2.MaxCorner.X),
+                Math.Max(b1.MaxCorner.Y, b2.MaxCorner.Y),
+                Math.Max(b1.MaxCorner.Y, b2.MaxCorner.Y));
+            return Box.Create(min,max);
+        }
+
+        static public Box GetBoundingBox(IPart part)
+        {
+            Matrix m = Matrix.Identity;
+            var bodies = GatherAllEntities<DesignBody>(part);
+            Box box = bodies[0].Shape.GetBoundingBox(m);
+            for (int i = 1; i < bodies.Count; i++)
+            {
+                //BoxUtility.
+                var b = bodies[i].Shape.GetBoundingBox(m);
+                box = MergeBoundingBoxes(box, b);
+            }
+
+            return box;
+        }
+
         static public List<T> GatherAllEntities<T>(IPart part) where T : DocObject
         {
             var allEntities = new List<T>();

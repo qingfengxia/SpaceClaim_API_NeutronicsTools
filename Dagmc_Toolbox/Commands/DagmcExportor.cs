@@ -1,5 +1,6 @@
 #define USE_DESIGN_OBJECT
 #define USE_OBJECT_AS_ENTITY
+//#define USE_POINT_HASH
 
 using System;
 using System.IO;
@@ -125,6 +126,12 @@ namespace Dagmc_Toolbox
 #endif
         List<RefGroup> GroupEntities;
 
+#if USE_POINT_HASH
+        PointHasher MyPointHasher;
+        Dictionary<ulong, EntityHandle> PointHashHandleMap = new Dictionary<ulong, EntityHandle>();
+#else
+        Dictionary<Point, EntityHandle> PointsOnEdgeHandleMap = new Dictionary<Point, EntityHandle>();
+#endif
         /// <summary>
         /// HashMap maybe needed, to find the original/unique face/edge
         /// is that possible to reserve capacity, to avoid dynamic memmory/container expansion?
@@ -137,7 +144,10 @@ namespace Dagmc_Toolbox
             {
                 Debug.Assert(g.Count == 2);
                 var l = (IDesignFace[])g;
-                DuplicatedFaceMonikerMap.Add(((DesignFace)l[1]).Moniker, (DesignFace)l[0]);
+                int fwd_i = l[0].Shape.IsReversed ? 0 : 1;
+                int reversed_i = fwd_i == 1 ? 0 : 1;
+                var m = ((DesignFace)l[fwd_i]).Moniker;
+                DuplicatedFaceMonikerMap.Add(m, (DesignFace)l[reversed_i]);
             }
 
             foreach ( var g in part.Analysis.SharedEdgeGroups)
@@ -423,8 +433,6 @@ namespace Dagmc_Toolbox
 
             message.WriteLine($"*******************\n stated to export dagmc {DateTime.Now} \n*******************");
 
-            //PointHasher.Test();  // unit test code, to be removed later, Remoting CrossAppDomain error
-
             bool result = true;
             Moab.ErrorCode rval;
 
@@ -456,6 +464,11 @@ namespace Dagmc_Toolbox
             FindSharedTopology(part);
             GenerateTopologyEntities(part);  // fill data fields: TopologyEntities , GroupEntities
 
+#if USE_POINT_HASH
+            Box box = part.Box; 
+            MyPointHasher = new PointHasher(box.MinPoint, box.MaxPoint);
+            //PointHasher.Test();  // unit test code, to be removed later, Remoting CrossAppDomain error
+#endif
             rval = create_entity_sets(entityMaps);
             CheckMoabErrorCode("Error creating entity sets: ", rval);
             //rval = create_group_sets(groupMap);
@@ -886,11 +899,17 @@ namespace Dagmc_Toolbox
         {
             Moab.ErrorCode rval;
             
-            foreach (KeyValuePair<RefEntity, EntityHandle> entry in curve_map)
+            foreach (KeyValuePair<RefEntity, EntityHandle> entry in surface_map)
             {
-                List<EntityHandle> ents = new List<EntityHandle>();
-                List<int> senses = new List<int>();
-                RefEdge edge = (RefEdge)entry.Key;
+                foreach (RefEdge edge in ((RefFace)entry.Key).Edges)
+                {
+                    var sense = Moab.SenseType.SENSE_FORWARD;
+                    if (edge.Shape.IsReversed)
+                        sense = Moab.SenseType.SENSE_REVERSE;
+
+                    rval = myGeomTool.SetSense(curve_map[edge], entry.Value, (int)sense);
+                    if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
+                }
 
                 //FIXME: find all parent sense relation edge->get_first_sense_entity_ptr()
                 /*
@@ -910,14 +929,17 @@ namespace Dagmc_Toolbox
                     }
                 */
 
-                // this MOAB API `myGeomTool.SetSenses(entry.Value, ents, senses); ` is not binded,
+                // this MOAB API `myGeomTool.SetSenses(entry.Value, ents, senses); ` is not wrapped
                 // due to missing support of std::vector<int>
                 // use the less effcient API to set sense for each entity
+                /*
+                List<EntityHandle> ents = new List<EntityHandle>();
+                List<int> senses = new List<int>();
                 for (int i = 0; i< ents.Count; i++)
                 {
                     myGeomTool.SetSense(entry.Value, ents[i], senses[i]);
                 }
-  
+                */
             }
 
              return Moab.ErrorCode.MB_SUCCESS;
@@ -1098,27 +1120,68 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
-        Moab.ErrorCode _add_vertex(in Point pos,  ref EntityHandle h)
+        Moab.ErrorCode _add_vertex(in Point pos,  ref EntityHandle h, bool on_edge = false)
         {
             Moab.ErrorCode rval;
             double[] coords = { pos.X, pos.Y, pos.Z };
             rval = myMoabInstance.CreateVertex(coords, ref h);
             if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
+
+            if(on_edge)
+            {
+#if USE_POINT_HASH
+                ulong hid = MyPointHasher.PointToHash(pos);
+                PointHashHandleMap.Add(hid, h);
+#else
+                PointsOnEdgeHandleMap.Add(pos, h);
+#endif
+            }
             
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
+        /// <summary>
+        ///  todo: switch between the slow conservative method, check all vertex_map,
+        ///  and faster edge_vertex_map, to make sure it is working as expected
+        /// </summary>
+        /// <param name="p"></param>
+        /// <param name="vertex_map"></param>
+        /// <returns></returns>
+        EntityHandle _vertex_handle(Point p, in RefEntityHandleMap vertex_map)
+        {
+#if USE_POINT_HASH
+            var hid = MyPointHasher.PointToHash(p);
+            if(PointHashHandleMap.ContainsKey(hid))
+                return PointHashHandleMap[hid];
+#else
+            foreach (var v in vertex_map.Keys)  // use PointsOnEdgeHandleMap should be faster
+            {
+                var pos = ((RefVertex)v).Position;
+
+                if ((pos - p).Magnitude < GEOMETRY_RESABS)  // length_square < GEOMETRY_RESABS*GEOMETRY_RESABS
+                {
+                    return vertex_map[v];
+                }
+            }
+#endif
+            return UNINITIALIZED_HANDLE;
+        }
+
+        /// <summary>
+        /// geometry vertices, before curve/edge meshing
+        /// </summary>
+        /// <param name="vertex_map"></param>
+        /// <returns></returns>
         Moab.ErrorCode create_vertices(ref RefEntityHandleMap vertex_map)
         {
             Moab.ErrorCode rval;
-            var keys = new List<RefEntity>(vertex_map.Keys);
-            foreach (var key in keys)
+            foreach (var key in TopologyEntities[VERTEX_INDEX])
             // collection is NOT allowed to be modified during iterating before net 5
             {
                 EntityHandle h = UNINITIALIZED_HANDLE;
                 RefVertex v = (RefVertex)key;
                 Point pos = v.Position;
-                rval = _add_vertex(pos, ref h);
+                rval = _add_vertex(pos, ref h, true);
                 // Add the vertex to its tagged meshset
                 rval = myMoabInstance.AddEntities(vertex_map[key], ref h, 1);
                 if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
@@ -1130,7 +1193,7 @@ namespace Dagmc_Toolbox
         }
 
         /// <summary>
-        ///  TODO + FIXME: get StartVertex may trigger RemotingException
+        /// 
         /// </summary>
         /// <param name="curve_map"></param>
         /// <param name="vertex_map"></param>
@@ -1261,6 +1324,14 @@ namespace Dagmc_Toolbox
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
+        /// <summary>
+        /// FIXME: failed to get Starting and Ending Vertex, RemotingException/no such key
+        /// </summary>
+        /// <param name="edge"></param>
+        /// <param name="points"></param>
+        /// <param name="edgeHandle"></param>
+        /// <param name="vertex_map"></param>
+        /// <returns></returns>
         Moab.ErrorCode add_edge_mesh(in Edge edge, ICollection<Point> points, ref EntityHandle edgeHandle,
                                ref RefEntityHandleMap vertex_map)
         {
@@ -1287,11 +1358,14 @@ namespace Dagmc_Toolbox
             var segs = new List<EntityHandle>();
             var verts = new List<EntityHandle>();
             /// FIXME: no such key in map,  skip now
-            //verts.Add(vertex_map[start_vtx]);  // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
-            foreach (var point in points)
+            //verts.Add(vertex_map[start_vtx]);  
+            // todo: check if in spaceclaim the edge tessellation has starting and ending vertex
+            foreach (var point in points)  
             {
                 EntityHandle h = UNINITIALIZED_HANDLE;
-                rval = _add_vertex(point, ref h);
+                /// this assertion can confirm start and ending vertex is not in the point list
+                Debug.Assert(_vertex_handle(point, vertex_map) == UNINITIALIZED_HANDLE);
+                rval = _add_vertex(point, ref h, true);
                 if (Moab.ErrorCode.MB_SUCCESS != rval)
                     return Moab.ErrorCode.MB_FAILURE;
                 verts.Add(h);
@@ -1347,32 +1421,17 @@ namespace Dagmc_Toolbox
             // For each geometric vertex, find a single coincident point in facets, Otherwise, print a warning
             // i.e. find the vertices on edge/curve which have been added into MOAB during add_edge_mesh(),
             // wont a hash matching faster?
-            foreach (var v in vertex_map.Keys)
+            for (int j = 0; j < nPoint; ++j)
             {
-                var pos = ((RefVertex)v).Position;
-                for (int j = 0; j < nPoint; ++j)
+                hVerts[j] = _vertex_handle(pointData[j].Position, vertex_map); 
+                if (UNINITIALIZED_HANDLE == hVerts[j])
                 {
-                    hVerts[j] = UNINITIALIZED_HANDLE;
-                    if ((pos - pointData[j].Position).Magnitude < GEOMETRY_RESABS)  // length_square < GEOMETRY_RESABS*GEOMETRY_RESABS
-                    {
-                        hVerts[0] = vertex_map[v];
-                    }
-                    else
-                    {
-                        //message.WriteLine($"Warning: Coincident vertices in surface, for the point at {pos}");
-                        // this huge amount IO slow down the saving process
-                    }
+                     _add_vertex(pointData[j].Position, ref hVerts[j]);
                 }
-            }
-
-            for(int i = 0; i< nPoint; i++)
-            {
-                if (hVerts[i] == UNINITIALIZED_HANDLE) // not found existing vertex in MOAB database
+                else
                 {
-                    EntityHandle h = UNINITIALIZED_HANDLE;
-                    _add_vertex(pointData[i].Position, ref h);
-                    //vertex_map[] = h;
-                    hVerts[i] = h;
+                    //message.WriteLine($"Warning: Coincident vertices in surface, for the point at {pos}");
+                    // this huge amount IO slow down the saving process
                 }
             }
 

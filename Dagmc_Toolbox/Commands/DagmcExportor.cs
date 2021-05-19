@@ -1,6 +1,7 @@
 #define USE_DESIGN_OBJECT
 #define USE_OBJECT_AS_ENTITY
 #define USE_POINT_HASH
+#define USE_SINGLE_COPY_FOR_SHARED_TOPOLOGY
 
 using System;
 using System.IO;
@@ -172,11 +173,10 @@ namespace Dagmc_Toolbox
         /// <returns></returns>
         private void GenerateTopologyEntities(in Part part)
         {
-
+            FindSharedTopology(part);
             GroupEntities = Helper.GatherAllEntities<RefGroup>(part);
 
-            // todo:  there is anther way to get all Faces, adding all Faces of body together,
-            // needs unit test to check the diff, and face count. 
+            // shared/duplicated faces/edges are not removed.
 #if USE_DESIGN_OBJECT
             List<RefEntity> bodies = Helper.GatherAllEntities<DesignBody>(part).ConvertAll<RefEntity>(o => (RefEntity)o);
             List<RefEntity> surfaces = Helper.GatherAllEntities<DesignFace>(part).ConvertAll<RefEntity>(o => (RefEntity)o);
@@ -184,12 +184,18 @@ namespace Dagmc_Toolbox
             List<RefEntity> vertices = new List<RefEntity>();  // There is no DesignVertex class
 
             // from each body, it is possible to get all Vertices from Body's Vertices property
+            // it is quicker than get verticies from all edges, also duplicated may be removed already
+            /*          
+            foreach(var e in edges)
+            {
+                vertices.AddRange(GetEdgeVertices((RefEdge)e)); 
+                // it seems possible to call first time, but the second time raise RemotingException
+            }*/
             foreach (var e in bodies)
             {
                 vertices.AddRange(((RefBody)e).Shape.Vertices);
             }
-            TopologyEntities = new List<RefEntity>[] { vertices, edges, surfaces, bodies };
-            //VertexEntities = vertices;
+
 #else
             var allBodies = Helper.GatherAllEntities<DesignBody>(part);
             List<RefEntity> bodies = allBodies.ConvertAll<RefEntity>(o => o.Shape);
@@ -202,15 +208,16 @@ namespace Dagmc_Toolbox
             {
                 vertices.AddRange(((RefBody)e).Vertices);
             }
-            TopologyEntities = new List<RefEntity>[] { vertices,  edges, surfaces, bodies};
 #endif
-            /*          
-            foreach(var e in edges)
-            {
-                vertices.AddRange(GetEdgeVertices((RefEdge)e)); 
-                // it seems possible to call first time, but the second time raise RemotingException
-            }*/
 
+#if USE_SINGLE_COPY_FOR_SHARED_TOPOLOGY
+            List<RefEntity> filteredEdges = edges.Where( e => !DuplicatedEdgeMonikerMap.ContainsKey(((RefEdge)e).Moniker)).ToList();
+            List<RefEntity> filteredFaces = surfaces.Where( e =>!DuplicatedFaceMonikerMap.ContainsKey(((RefFace)e).Moniker)).ToList();
+            // todo: vertices to be filtered? if vertices is get from body, directly, may be there is no needed to check
+            TopologyEntities = new List<RefEntity>[] { vertices, filteredEdges, filteredFaces, bodies };
+#else
+            TopologyEntities = new List<RefEntity>[] { vertices, edges, surfaces, bodies };
+#endif
         }
 
 #if !USE_OBJECT_AS_ENTITY
@@ -249,12 +256,6 @@ namespace Dagmc_Toolbox
         }
 #endif
 
-        List<RefEntity> GetBodiesInGroup(in RefGroup group)
-        {
-            List<RefEntity> v = new List<RefEntity>();
-            // todo
-            return v;
-        }
 
         /*  List<X> cast to List<Y> will create a new List, not efficient
         ///  https://stackoverflow.com/questions/5115275/shorter-syntax-for-casting-from-a-listx-to-a-listy
@@ -462,7 +463,6 @@ namespace Dagmc_Toolbox
 
             Part part = Helper.GetActiveMainPart();  // NOTE: a document have multiple Parts? yes, but one MainPart
             // here there may be random error, can not captured by visual studio debugger
-            FindSharedTopology(part);
             GenerateTopologyEntities(part);  // fill data fields: TopologyEntities , GroupEntities
 
 #if USE_POINT_HASH
@@ -775,22 +775,47 @@ namespace Dagmc_Toolbox
             for (int dim = 1; dim < 4; ++dim)
             {
                 var entitymap = entitymaps[dim];
+
                 foreach (KeyValuePair<RefEntity, EntityHandle> entry in entitymap)
                 {
-                    // declare new List here, no need for entlist.clean_out(); entlist.reset(); 
+                    EntityHandle parentEntity = entry.Value;
+#if USE_SINGLE_COPY_FOR_SHARED_TOPOLOGY
+                    if (dim == 1)
+                    {
+                        if (DuplicatedEdgeMonikerMap.ContainsKey(((RefEdge)entry.Key).Moniker))
+                        {
+                            message.WriteLine("Debug: duplicated found during topology creation, use forward face as parent entity");
+                            var sharedEdge = DuplicatedEdgeMonikerMap[((RefEdge)entry.Key).Moniker];
+                            parentEntity = entitymap[sharedEdge];
+                        }
+                    }
+                    if (dim == 2)
+                    {
+                        if (DuplicatedFaceMonikerMap.ContainsKey(((RefFace)entry.Key).Moniker))
+                        {
+                            message.WriteLine("Debug: reversed face found during topology creation, use forward face as parent entity");
+                            var fwdFace = DuplicatedFaceMonikerMap[((RefFace)entry.Key).Moniker];
+                            parentEntity = entitymap[fwdFace];
+                            // may remove duplicated entity in MOAB
+                        }
+                    }
+#endif
                     List<RefEntity> entitylist = get_child_ref_entities(entry.Key, dim);
                     foreach (RefEntity ent in entitylist)
                     {
                         if (entitymaps[dim - 1].ContainsKey(ent))
                         {
                             EntityHandle h = entitymaps[dim - 1][ent];
-                            rval = myMoabInstance.AddParentChild(entry.Value, h);
+                            rval = myMoabInstance.AddParentChild(parentEntity, h);
                             if (Moab.ErrorCode.MB_SUCCESS != rval)
                                 return rval;  // todo:  print debug info
                         }
                         else  // Fixme
                         {
-                            message.WriteLine($"There is logic error in `create_topology()`, children handle is not found for entity dim = {dim}\n");
+#if !USE_SINGLE_COPY_FOR_SHARED_TOPOLOGY
+                            message.WriteLine("There is logic error in `create_topology()`, " +
+                                $"children handle is not found for entity dim = {dim}\n");
+#endif
                         }
                     }
                 }
@@ -827,8 +852,16 @@ namespace Dagmc_Toolbox
                     var sense = Moab.SenseType.SENSE_FORWARD;
                     if (face.Shape.IsReversed)
                         sense = Moab.SenseType.SENSE_REVERSE;
-
-                    rval = myGeomTool.SetSense(surface_map[face], volume_map[body], (int)sense);
+                    var surfaceHandle = UNINITIALIZED_HANDLE;
+                    if (DuplicatedFaceMonikerMap.ContainsKey(face.Moniker))
+                    {
+                        surfaceHandle = surface_map[DuplicatedFaceMonikerMap[face.Moniker]];
+                    }
+                    else
+                    {
+                        surfaceHandle = surface_map[face];
+                    }
+                    rval = myGeomTool.SetSense(surfaceHandle, volume_map[body], (int)sense);
                     if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
                 }
 
@@ -836,7 +869,8 @@ namespace Dagmc_Toolbox
                 // Cubut each lower topology types may have more than one upper topology types
 
 
-                /* this code block blow do check_surface_sense(), it is not needed in SpaceClaim
+                /* this code block blow do check_surface_sense(),
+                // "Check that each surface has a sense for only one volume" is not needed in SpaceClaim
                  * 
                 RefFace* face = (RefFace*)(ci->first);
                 BasicTopologyEntity *forward = 0, *reverse = 0;
@@ -910,7 +944,17 @@ namespace Dagmc_Toolbox
                     if (edge.Shape.IsReversed)
                         sense = Moab.SenseType.SENSE_REVERSE;
 
-                    rval = myGeomTool.SetSense(curve_map[edge], entry.Value, (int)sense);
+                    var curveHandle = UNINITIALIZED_HANDLE;
+                    if (DuplicatedEdgeMonikerMap.ContainsKey(edge.Moniker))
+                    {
+                        curveHandle = curve_map[DuplicatedEdgeMonikerMap[edge.Moniker]];
+                    }
+                    else
+                    {
+                        curveHandle = curve_map[edge];
+                    }
+
+                    rval = myGeomTool.SetSense(curveHandle, entry.Value, (int)sense);
                     if (Moab.ErrorCode.MB_SUCCESS != rval) return rval;
                 }
 
@@ -1490,20 +1534,30 @@ namespace Dagmc_Toolbox
 
             // Add entities to the curve meshset from entitymap
             EntityHandle[] meshVerts = hVerts;
-            rval = myMoabInstance.AddEntities(faceHandle, ref meshVerts[0], meshVerts.Length);
-            if (Moab.ErrorCode.MB_SUCCESS != rval)
-                return Moab.ErrorCode.MB_FAILURE;
             EntityHandle[] meshFaces = hFacets.ToArray();
-            rval = myMoabInstance.AddEntities(faceHandle, ref meshFaces[0], meshFaces.Length);
-            if (Moab.ErrorCode.MB_SUCCESS != rval)
-                return Moab.ErrorCode.MB_FAILURE;
 
-            // todo: registered to other face handle, that share the interior facets,
-            // or surface_map has already remove the duplicated (only one face kept for a shared face group)
+            rval = _register_surface_facets(faceHandle, in meshVerts, in meshFaces);
+#if USE_SINGLE_COPY_FOR_SHARED_TOPOLOGY
+            // do nothing,  surface_map has already remove the duplicated (only one face kept for a shared face group)
+#else
+            // registered to other face handle, that share the interior facets,
+#endif
 
             return Moab.ErrorCode.MB_SUCCESS;
         }
 
+        Moab.ErrorCode _register_surface_facets(EntityHandle faceHandle, in EntityHandle[] meshVerts, in EntityHandle[] meshFaces)
+        {
+            Moab.ErrorCode rval;
+            rval = myMoabInstance.AddEntities(faceHandle, ref meshVerts[0], meshVerts.Length);
+            if (Moab.ErrorCode.MB_SUCCESS != rval)
+                return Moab.ErrorCode.MB_FAILURE;
+
+            rval = myMoabInstance.AddEntities(faceHandle, ref meshFaces[0], meshFaces.Length);
+            if (Moab.ErrorCode.MB_SUCCESS != rval)
+                return Moab.ErrorCode.MB_FAILURE;
+            return Moab.ErrorCode.MB_SUCCESS;
+        }
 
 
         Moab.ErrorCode create_surface_facets(ref RefEntityHandleMap surface_map, ref RefEntityHandleMap edge_map,
@@ -1539,7 +1593,7 @@ namespace Dagmc_Toolbox
                     List<Face> uniqueFaces = new List<Face>();
                     if (DuplicatedFaceMonikerMap.ContainsKey(f.Moniker))
                     {
-                        message.WriteLine("duplicated face has been found ");
+                        message.WriteLine("Debug: duplicated face has been found during surface faceting, skip this face");
                     }
                     else
                     {

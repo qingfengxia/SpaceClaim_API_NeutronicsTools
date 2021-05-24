@@ -64,7 +64,7 @@ namespace Dagmc_Toolbox.Commands
 
         protected void CheckBody(Object obj)
         {
-            var rawBody = (SpaceClaim.Modeler.ISolidBody)obj;
+            var rawBody = (SpaceClaim.Modeler.ISolidBody)obj;  // needs to reference to a few SpaceClaim assemblies
             List<SpaceClaim.CheckMessage> messages = new List<SpaceClaim.CheckMessage>();
             rawBody.Check(SpaceClaim.ModelerCheckLevel.CompleteCheck_70, true, messages);
             //

@@ -191,6 +191,34 @@ namespace Dagmc_Toolbox.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap RemoteTrelis {
+            get {
+                object obj = ResourceManager.GetObject("RemoteTrelis", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Generate DAGMC mesh using remote Trelis.
+        /// </summary>
+        internal static string RemoteTrelisHint {
+            get {
+                return ResourceManager.GetString("RemoteTrelisHint", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to RemoteTrelis.
+        /// </summary>
+        internal static string RemoteTrelisText {
+            get {
+                return ResourceManager.GetString("RemoteTrelisText", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to &lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;
         ///&lt;customUI xmlns=&quot;http://schemas.spaceclaim.com/customui&quot;&gt;
         ///	&lt;ribbon&gt;
